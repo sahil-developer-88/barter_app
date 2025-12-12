@@ -47,7 +47,7 @@ export type Database = {
         }
         Relationships: []
       }
-      business_listings: {
+      businesses: {
         Row: {
           barter_percentage: number | null
           business_name: string
@@ -84,57 +84,6 @@ export type Database = {
         }
         Update: {
           barter_percentage?: number | null
-          business_name?: string
-          category?: string
-          contact_method?: string
-          created_at?: string
-          description?: string
-          estimated_value?: number | null
-          id?: string
-          images?: string[] | null
-          location?: string
-          services_offered?: string[]
-          status?: string
-          updated_at?: string
-          user_id?: string
-          wanting_in_return?: string[]
-        }
-        Relationships: []
-      }
-      businesses: {
-        Row: {
-          business_name: string
-          category: string
-          contact_method: string
-          created_at: string
-          description: string
-          estimated_value: number | null
-          id: string
-          images: string[] | null
-          location: string
-          services_offered: string[]
-          status: string
-          updated_at: string
-          user_id: string
-          wanting_in_return: string[]
-        }
-        Insert: {
-          business_name: string
-          category: string
-          contact_method: string
-          created_at?: string
-          description: string
-          estimated_value?: number | null
-          id?: string
-          images?: string[] | null
-          location: string
-          services_offered?: string[]
-          status?: string
-          updated_at?: string
-          user_id: string
-          wanting_in_return?: string[]
-        }
-        Update: {
           business_name?: string
           category?: string
           contact_method?: string
@@ -234,6 +183,7 @@ export type Database = {
           created_at: string | null
           expires_at: string | null
           id: string
+          metadata: Json | null
           provider: string
           state_token: string
           user_id: string
@@ -242,6 +192,7 @@ export type Database = {
           created_at?: string | null
           expires_at?: string | null
           id?: string
+          metadata?: Json | null
           provider: string
           state_token: string
           user_id: string
@@ -250,6 +201,7 @@ export type Database = {
           created_at?: string | null
           expires_at?: string | null
           id?: string
+          metadata?: Json | null
           provider?: string
           state_token?: string
           user_id?: string
@@ -476,6 +428,8 @@ export type Database = {
           id: string
           legal_name: string
           other_business_type: string | null
+          signature: string | null
+          signature_date: string | null
           state: string
           tax_id: string
           tax_id_type: string
@@ -495,6 +449,8 @@ export type Database = {
           id?: string
           legal_name: string
           other_business_type?: string | null
+          signature?: string | null
+          signature_date?: string | null
           state: string
           tax_id: string
           tax_id_type: string
@@ -514,6 +470,8 @@ export type Database = {
           id?: string
           legal_name?: string
           other_business_type?: string | null
+          signature?: string | null
+          signature_date?: string | null
           state?: string
           tax_id?: string
           tax_id_type?: string
@@ -586,66 +544,6 @@ export type Database = {
           spent_credits?: number
           updated_at?: string
           user_id?: string
-        }
-        Relationships: []
-      }
-      w9_tax_info: {
-        Row: {
-          account_number: string | null
-          address: string
-          business_name: string | null
-          business_type: string
-          certification_agreed: boolean | null
-          city: string
-          created_at: string
-          exempt_from_backup_withholding: boolean | null
-          id: string
-          legal_name: string
-          other_business_type: string | null
-          state: string
-          tax_id: string
-          tax_id_type: string
-          updated_at: string
-          user_id: string
-          zip_code: string
-        }
-        Insert: {
-          account_number?: string | null
-          address: string
-          business_name?: string | null
-          business_type: string
-          certification_agreed?: boolean | null
-          city: string
-          created_at?: string
-          exempt_from_backup_withholding?: boolean | null
-          id?: string
-          legal_name: string
-          other_business_type?: string | null
-          state: string
-          tax_id: string
-          tax_id_type: string
-          updated_at?: string
-          user_id: string
-          zip_code: string
-        }
-        Update: {
-          account_number?: string | null
-          address?: string
-          business_name?: string | null
-          business_type?: string
-          certification_agreed?: boolean | null
-          city?: string
-          created_at?: string
-          exempt_from_backup_withholding?: boolean | null
-          id?: string
-          legal_name?: string
-          other_business_type?: string | null
-          state?: string
-          tax_id?: string
-          tax_id_type?: string
-          updated_at?: string
-          user_id?: string
-          zip_code?: string
         }
         Relationships: []
       }

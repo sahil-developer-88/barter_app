@@ -2,7 +2,8 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useAdminAccess } from '@/hooks/useAdminAccess';
+import { useHasRole } from '@/hooks/useHasRole';
+// import { useAdminAccess } from '@/hooks/useAdminAccess';
 import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
@@ -12,7 +13,8 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireOnboarding = false }) => {
   const { user, loading: authLoading } = useAuth();
-  const { isAdmin, loading: adminLoading } = useAdminAccess();
+  const { hasRole: isAdmin, loading: adminLoading } = useHasRole('admin');
+  // const { isAdmin, loading: adminLoading } = useAdminAccess();
 
   // Show loading while checking auth or admin status
   if (authLoading || adminLoading) {

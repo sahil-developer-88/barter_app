@@ -30,7 +30,7 @@ const AIChatbar = ({ onSearch, onClose }: AIChatbarProps) => {
   useEffect(() => {
     const fetchBusinesses = async () => {
       const { data, error } = await supabase
-        .from('business_listings')
+        .from('businesses')
         .select('*')
         .eq('status', 'active');
 

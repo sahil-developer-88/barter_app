@@ -9,6 +9,8 @@ import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Link2, Store, Percent, CreditCard, Receipt } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface POSTransaction {
   id: string;
@@ -37,23 +39,112 @@ const POSIntegration = ({ onTransactionImport, customerBarterBalance }: POSInteg
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [barterPercentage, setBarterPercentage] = useState([0]);
   const [autoImport, setAutoImport] = useState(true);
-  const [storeSystem, setStoreSystem] = useState('');
-  const [apiEndpoint, setApiEndpoint] = useState('');
+  const [shopifyShopName, setShopifyShopName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Simulate POS system connection
-  const connectToPOS = () => {
-    setConnectionStatus('connecting');
-    setTimeout(() => {
-      setConnectionStatus('connected');
+  // Check for OAuth callback status on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthSuccess = params.get('oauth_success');
+    const oauthError = params.get('oauth_error');
+    const provider = params.get('provider');
+
+    if (oauthSuccess === 'true' && provider === 'shopify') {
+      toast.success('Successfully connected to Shopify!');
       setIsConnected(true);
-      
-      // Simulate receiving a transaction from POS
-      if (autoImport) {
-        setTimeout(() => {
-          simulateIncomingTransaction();
-        }, 2000);
+      setConnectionStatus('connected');
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+      checkExistingIntegrations();
+    } else if (oauthError) {
+      toast.error(`Connection failed: ${decodeURIComponent(oauthError)}`);
+      setConnectionStatus('disconnected');
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  // Check if user already has a Shopify integration
+  const checkExistingIntegrations = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('pos_integrations')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('provider', 'shopify')
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (data && !error) {
+        setIsConnected(true);
+        setConnectionStatus('connected');
+        setShopifyShopName(data.store_id || '');
       }
-    }, 1500);
+    } catch (error) {
+      console.error('Error checking integrations:', error);
+    }
+  };
+
+  useEffect(() => {
+    checkExistingIntegrations();
+  }, []);
+
+  // Connect to Shopify via OAuth
+  const connectToShopify = async () => {
+    if (!shopifyShopName.trim()) {
+      toast.error('Please enter your Shopify store name');
+      return;
+    }
+
+    setIsLoading(true);
+    setConnectionStatus('connecting');
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('You must be logged in to connect');
+      }
+
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session');
+      }
+
+      // Call the OAuth initiate function
+      const response = await fetch(
+        `https://etzwoyyhxvwpdejckpaq.supabase.co/functions/v1/pos-oauth-initiate`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            provider: 'shopify',
+            shopName: shopifyShopName.trim().replace('.myshopify.com', ''),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to initiate OAuth');
+      }
+
+      const { authorizationUrl } = await response.json();
+
+      // Redirect to Shopify OAuth page
+      window.location.href = authorizationUrl;
+    } catch (error: any) {
+      console.error('Error connecting to Shopify:', error);
+      toast.error(error.message || 'Failed to connect to Shopify');
+      setConnectionStatus('disconnected');
+      setIsLoading(false);
+    }
   };
 
   const simulateIncomingTransaction = () => {
@@ -89,46 +180,42 @@ const POSIntegration = ({ onTransactionImport, customerBarterBalance }: POSInteg
       <CardContent className="space-y-6">
         {/* Connection Setup */}
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="storeSystem">Store System</Label>
+          <div className="space-y-2">
+            <Label htmlFor="shopifyShopName">Shopify Store Name</Label>
+            <div className="flex gap-2">
               <Input
-                id="storeSystem"
-                placeholder="e.g., Square, Shopify POS, Toast"
-                value={storeSystem}
-                onChange={(e) => setStoreSystem(e.target.value)}
+                id="shopifyShopName"
+                placeholder="your-store-name"
+                value={shopifyShopName}
+                onChange={(e) => setShopifyShopName(e.target.value)}
+                disabled={isConnected}
               />
+              <span className="flex items-center text-sm text-gray-600">.myshopify.com</span>
             </div>
-            <div>
-              <Label htmlFor="apiEndpoint">API Endpoint (Optional)</Label>
-              <Input
-                id="apiEndpoint"
-                placeholder="https://api.yourstoresystem.com"
-                value={apiEndpoint}
-                onChange={(e) => setApiEndpoint(e.target.value)}
-              />
-            </div>
+            <p className="text-xs text-gray-500">
+              Enter your Shopify store name (e.g., "my-store" for my-store.myshopify.com)
+            </p>
           </div>
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Store className="w-5 h-5 text-gray-600" />
               <span className="font-medium">Connection Status:</span>
-              <Badge 
+              <Badge
                 variant={connectionStatus === 'connected' ? 'default' : 'secondary'}
                 className={connectionStatus === 'connected' ? 'bg-green-600' : ''}
               >
                 {connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}
               </Badge>
             </div>
-            
+
             {!isConnected && (
-              <Button 
-                onClick={connectToPOS}
-                disabled={connectionStatus === 'connecting'}
+              <Button
+                onClick={connectToShopify}
+                disabled={isLoading || !shopifyShopName.trim()}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                {connectionStatus === 'connecting' ? 'Connecting...' : 'Connect to POS'}
+                {isLoading ? 'Connecting...' : 'Connect to Shopify'}
               </Button>
             )}
           </div>
@@ -194,12 +281,12 @@ const POSIntegration = ({ onTransactionImport, customerBarterBalance }: POSInteg
 
         {/* Integration Instructions */}
         <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-          <h5 className="font-semibold text-blue-800 mb-2">Integration Options:</h5>
+          <h5 className="font-semibold text-blue-800 mb-2">How Shopify Integration Works:</h5>
           <ul className="text-sm text-blue-700 space-y-1">
-            <li>• <strong>API Integration:</strong> Connect via REST API for real-time sync</li>
-            <li>• <strong>Webhook:</strong> Receive transaction data automatically</li>
-            <li>• <strong>QR Code:</strong> Customer scans to import their receipt</li>
-            <li>• <strong>Receipt Upload:</strong> Scan or upload receipt images</li>
+            <li>• <strong>OAuth Connection:</strong> Securely connect your Shopify store</li>
+            <li>• <strong>Auto Webhook:</strong> Automatically receives new orders in real-time</li>
+            <li>• <strong>Permissions:</strong> Read orders and products from your store</li>
+            <li>• <strong>Barter Payments:</strong> Apply barter credits to transactions automatically</li>
           </ul>
         </div>
 
@@ -207,11 +294,11 @@ const POSIntegration = ({ onTransactionImport, customerBarterBalance }: POSInteg
           <div className="bg-green-50 p-4 rounded-lg border border-green-200">
             <div className="flex items-center gap-2 mb-2">
               <Receipt className="w-4 h-4 text-green-600" />
-              <span className="font-semibold text-green-800">Ready to Accept Transactions</span>
+              <span className="font-semibold text-green-800">Shopify Connected Successfully!</span>
             </div>
             <p className="text-sm text-green-700">
-              The system is now connected and ready to receive scanned items from your POS system.
-              Transactions will be automatically imported with barter credits applied.
+              Your Shopify store "{shopifyShopName}" is now connected. New orders will automatically
+              sync with your barter system. Webhooks have been configured to receive real-time order updates.
             </p>
           </div>
         )}

@@ -116,7 +116,7 @@ async function fetchCloverPayment(
 ): Promise<any> {
   try {
     const response = await fetch(
-      `https://api.clover.com/v3/merchants/${merchantId}/payments/${paymentId}`,
+      `https://sandbox.dev.clover.com/v3/merchants/${merchantId}/payments/${paymentId}`,
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`,

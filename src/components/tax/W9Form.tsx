@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,13 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { FileText, Shield, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { FileText, Shield, AlertTriangle, Eye, Download, Loader2, Pen, Trash2 } from "lucide-react";
+import { Document, Page } from 'react-pdf';
+import { generateFilledW9Pdf, downloadFilledW9Pdf } from '@/utils/w9PdfGenerator';
+import SignatureCanvas from 'react-signature-canvas';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 
 interface W9FormData {
   legalName: string;
@@ -23,6 +29,8 @@ interface W9FormData {
   accountNumber: string;
   exemptFromBackupWithholding: boolean;
   certificationAgreed: boolean;
+  signature?: string;
+  signatureDate?: string;
 }
 
 interface W9FormProps {
@@ -32,6 +40,8 @@ interface W9FormProps {
 }
 
 const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) => {
+  const signatureRef = useRef<SignatureCanvas>(null);
+
   const [formData, setFormData] = useState<W9FormData>({
     legalName: '',
     businessName: '',
@@ -45,11 +55,15 @@ const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) 
     zipCode: '',
     accountNumber: '',
     exemptFromBackupWithholding: false,
-    certificationAgreed: false
+    certificationAgreed: false,
+    signatureDate: new Date().toLocaleDateString('en-US')
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -96,7 +110,16 @@ const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) 
     if (validateForm()) {
       setLoading(true);
       try {
-        await onSubmit(formData);
+        // Capture signature from canvas
+        let signatureData = formData.signature;
+        if (signatureRef.current && !signatureRef.current.isEmpty()) {
+          signatureData = signatureRef.current.toDataURL('image/png');
+        }
+
+        await onSubmit({
+          ...formData,
+          signature: signatureData
+        });
       } catch (error) {
         console.error('Error submitting W-9:', error);
       } finally {
@@ -108,6 +131,61 @@ const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) 
   const handleSkip = () => {
     setLoading(true);
     onSkip();
+  };
+
+  const handlePreview = async () => {
+    // Validate form before preview
+    if (!validateForm()) {
+      return;
+    }
+
+    // Capture signature from canvas
+    let signatureData = formData.signature;
+    if (signatureRef.current && !signatureRef.current.isEmpty()) {
+      signatureData = signatureRef.current.toDataURL('image/png');
+    }
+
+    setGeneratingPdf(true);
+    try {
+      const url = await generateFilledW9Pdf({
+        ...formData,
+        signature: signatureData
+      });
+      setPdfUrl(url);
+      setShowPreview(true);
+    } catch (error) {
+      console.error('Error generating preview:', error);
+      setErrors({ preview: 'Failed to generate PDF preview' });
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    setGeneratingPdf(true);
+    try {
+      // Capture signature from canvas
+      let signatureData = formData.signature;
+      if (signatureRef.current && !signatureRef.current.isEmpty()) {
+        signatureData = signatureRef.current.toDataURL('image/png');
+      }
+
+      await downloadFilledW9Pdf(
+        { ...formData, signature: signatureData },
+        `w9-${formData.legalName.replace(/\s+/g, '-').toLowerCase()}.pdf`
+      );
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      setErrors({ download: 'Failed to download PDF' });
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleClearSignature = () => {
+    if (signatureRef.current) {
+      signatureRef.current.clear();
+    }
   };
 
   const formatTaxId = (value: string) => {
@@ -343,15 +421,15 @@ const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) 
               <Checkbox
                 id="certificationAgreed"
                 checked={formData.certificationAgreed}
-                onCheckedChange={(checked) => 
+                onCheckedChange={(checked) =>
                   setFormData(prev => ({ ...prev, certificationAgreed: !!checked }))
                 }
               />
               <Label htmlFor="certificationAgreed" className="text-sm leading-relaxed">
-                I certify that: (1) The number shown on this form is my correct taxpayer identification number, 
-                (2) I am not subject to backup withholding because: (a) I am exempt from backup withholding, 
-                or (b) I have not been notified by the IRS that I am subject to backup withholding, 
-                (3) I am a U.S. citizen or other U.S. person, and (4) The FATCA code(s) entered on this form 
+                I certify that: (1) The number shown on this form is my correct taxpayer identification number,
+                (2) I am not subject to backup withholding because: (a) I am exempt from backup withholding,
+                or (b) I have not been notified by the IRS that I am subject to backup withholding,
+                (3) I am a U.S. citizen or other U.S. person, and (4) The FATCA code(s) entered on this form
                 (if any) indicating that I am exempt from FATCA reporting is correct. *
               </Label>
             </div>
@@ -360,28 +438,173 @@ const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) 
             )}
           </div>
 
+          {/* Signature Section */}
+          <div className="space-y-4">
+            <div>
+              <Label className="text-base font-semibold flex items-center gap-2">
+                <Pen className="h-4 w-4" />
+                Signature *
+              </Label>
+              <p className="text-sm text-gray-600 mt-1">
+                Sign below using your mouse or touch screen
+              </p>
+            </div>
+
+            <div className="border-2 border-gray-300 rounded-lg bg-white">
+              <SignatureCanvas
+                ref={signatureRef}
+                canvasProps={{
+                  className: 'w-full h-40 cursor-crosshair',
+                  style: { touchAction: 'none' }
+                }}
+                backgroundColor="white"
+              />
+            </div>
+
+            <div className="flex justify-between items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleClearSignature}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear Signature
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Label htmlFor="signatureDate" className="text-sm">Date:</Label>
+                <Input
+                  id="signatureDate"
+                  type="text"
+                  value={formData.signatureDate || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, signatureDate: e.target.value }))}
+                  className="w-40"
+                  placeholder="MM/DD/YYYY"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Submit Buttons */}
-          <div className="flex justify-between pt-6">
+          <div className="flex justify-between items-center pt-6 gap-3">
             {!isRequired && (
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={handleSkip}
-                disabled={loading}
+                disabled={loading || generatingPdf}
               >
                 {loading ? 'Processing...' : 'Skip for Now'}
               </Button>
             )}
-            <Button 
-              type="submit" 
-              className="ml-auto"
-              disabled={loading}
-            >
-              {loading ? 'Submitting...' : 'Submit W-9 Information'}
-            </Button>
+
+            <div className="flex gap-2 ml-auto">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handlePreview}
+                disabled={loading || generatingPdf}
+              >
+                {generatingPdf ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-4 w-4 mr-2" />
+                    Preview PDF
+                  </>
+                )}
+              </Button>
+
+              <Button
+                type="submit"
+                disabled={loading || generatingPdf}
+              >
+                {loading ? 'Submitting...' : 'Submit W-9 Information'}
+              </Button>
+            </div>
           </div>
         </form>
       </CardContent>
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>W-9 Form Preview</DialogTitle>
+            <DialogDescription>
+              Review your completed W-9 form below. You can download it or go back to make changes.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {pdfUrl && (
+              <div className="border rounded-lg overflow-auto bg-gray-50 p-4">
+                <Document
+                  file={pdfUrl}
+                  loading={
+                    <div className="flex items-center justify-center p-8">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  }
+                  error={
+                    <div className="text-center p-8 text-red-600">
+                      Failed to load PDF preview
+                    </div>
+                  }
+                >
+                  <Page
+                    pageNumber={1}
+                    renderAnnotationLayer={false}
+                    renderTextLayer={false}
+                    width={700}
+                  />
+                </Document>
+              </div>
+            )}
+
+            <div className="flex justify-between">
+              <Button
+                variant="outline"
+                onClick={() => setShowPreview(false)}
+              >
+                Close
+              </Button>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={handleDownloadPdf}
+                  disabled={generatingPdf}
+                >
+                  {generatingPdf ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download PDF
+                    </>
+                  )}
+                </Button>
+
+                <Button onClick={() => {
+                  setShowPreview(false);
+                  // Optionally submit after preview
+                  // handleSubmit(new Event('submit'));
+                }}>
+                  Continue to Submit
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

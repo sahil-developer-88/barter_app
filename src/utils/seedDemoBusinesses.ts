@@ -120,7 +120,7 @@ export const seedDemoBusinesses = async (userId: string) => {
     }));
 
     const { data, error } = await supabase
-      .from('business_listings')
+      .from('businesses')
       .insert(businessesToInsert)
       .select();
 
@@ -140,7 +140,7 @@ export const clearDemoBusinesses = async () => {
     const demoNames = demoBusinesses.map(b => b.business_name);
     
     const { error } = await supabase
-      .from('business_listings')
+      .from('businesses')
       .delete()
       .in('business_name', demoNames);
 

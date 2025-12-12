@@ -2,13 +2,15 @@
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useAdminAccess } from "@/hooks/useAdminAccess";
+import { useHasRole } from "@/hooks/useHasRole";
+// import { useAdminAccess } from "@/hooks/useAdminAccess";
 import { useNavigate } from 'react-router-dom';
 import { LogOut, LogIn, QrCode, Scan, Shield } from 'lucide-react';
 
 const Header = () => {
   const { user, signOut } = useAuth();
-  const { isAdmin } = useAdminAccess();
+  const { hasRole: isAdmin } = useHasRole('admin');
+  // const { isAdmin } = useAdminAccess();
   const navigate = useNavigate();
 
   const handleAuthAction = () => {

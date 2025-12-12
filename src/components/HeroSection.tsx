@@ -17,7 +17,7 @@ const HeroSection = () => {
       try {
         // Get count of active businesses
         const { count: businessCount } = await supabase
-          .from('business_listings')
+          .from('businesses')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'active');
 

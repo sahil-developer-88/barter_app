@@ -1,4 +1,11 @@
+/*
+ * DEPRECATED: This hook has been replaced by useHasRole
+ *
+ * OLD IMPLEMENTATION (Kept for reference):
+ * Use useHasRole('admin') instead
+ */
 
+/*
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -44,3 +51,8 @@ export const useAdminAccess = (): AdminAccess => {
 
   return { isAdmin, loading, error };
 };
+*/
+
+// NEW IMPLEMENTATION: Use useHasRole instead
+// import { useHasRole } from '@/hooks/useHasRole';
+// const { hasRole: isAdmin } = useHasRole('admin');

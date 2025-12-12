@@ -21,6 +21,13 @@ self.addEventListener('install', (event) => {
 
 // Fetch event
 self.addEventListener('fetch', (event) => {
+  // Never cache Supabase function calls - always fetch fresh
+  if (event.request.url.includes('/functions/v1/')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // For other requests, use cache-first strategy
   event.respondWith(
     caches.match(event.request)
       .then((response) => {

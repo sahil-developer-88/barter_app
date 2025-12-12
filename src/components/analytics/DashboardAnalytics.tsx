@@ -48,7 +48,7 @@ const DashboardAnalytics: React.FC = () => {
     try {
       // Fetch user's listings
       const { data: listings } = await supabase
-        .from('business_listings')
+        .from('businesses')
         .select('*')
         .eq('user_id', user.id);
 

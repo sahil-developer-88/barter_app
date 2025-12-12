@@ -17,17 +17,23 @@ const refreshToken = async (provider: string, refreshToken: string) => {
       clientId = Deno.env.get('SQUARE_OAUTH_CLIENT_ID') || '';
       clientSecret = Deno.env.get('SQUARE_OAUTH_CLIENT_SECRET') || '';
       break;
-    
+
     case 'shopify':
       // Shopify tokens don't expire, so no refresh needed
       throw new Error('Shopify tokens do not require refresh');
-    
+
     case 'clover':
       tokenUrl = 'https://www.clover.com/oauth/token';
       clientId = Deno.env.get('CLOVER_OAUTH_CLIENT_ID') || '';
       clientSecret = Deno.env.get('CLOVER_OAUTH_CLIENT_SECRET') || '';
       break;
-    
+
+    case 'lightspeed':
+      tokenUrl = 'https://cloud.lightspeedapp.com/auth/oauth/token';
+      clientId = Deno.env.get('LIGHTSPEED_OAUTH_CLIENT_ID') || '';
+      clientSecret = Deno.env.get('LIGHTSPEED_OAUTH_CLIENT_SECRET') || '';
+      break;
+
     default:
       throw new Error(`Unsupported provider: ${provider}`);
   }

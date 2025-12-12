@@ -20,13 +20,15 @@ import {
   AlertTriangle,
   Loader2
 } from "lucide-react";
-import { useAdminAccess } from '@/hooks/useAdminAccess';
+import { useHasRole } from '@/hooks/useHasRole';
 import { useAuth } from '@/hooks/useAuth';
+// import { useAdminAccess } from '@/hooks/useAdminAccess';
 import Form1099Dashboard from '@/components/tax/Form1099Dashboard';
 
 const AdminPanel = () => {
   const { user } = useAuth();
-  const { isAdmin, loading, error } = useAdminAccess();
+  const { hasRole: isAdmin, loading, error } = useHasRole('admin');
+  // const { isAdmin, loading, error } = useAdminAccess();
   const [activeTab, setActiveTab] = useState('overview');
   const [customCreditAmount, setCustomCreditAmount] = useState('');
 

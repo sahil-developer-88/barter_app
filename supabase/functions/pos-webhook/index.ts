@@ -17,10 +17,11 @@ import { handleShopifyWebhook } from './providers/shopify.ts';
 import { handleAdyenWebhook } from './providers/adyen.ts';
 import { handleCloverWebhook } from './providers/clover.ts';
 import { handleToastWebhook } from './providers/toast.ts';
+import { handleLightspeedWebhook } from './providers/lightspeed.ts';
 
 /**
  * Main webhook endpoint that routes to provider-specific handlers
- * Supports: Square, Shopify, Adyen, Clover, Toast
+ * Supports: Square, Shopify, Adyen, Clover, Toast, Lightspeed
  */
 serve(async (req) => {
   // Handle CORS preflight
@@ -73,6 +74,9 @@ serve(async (req) => {
         break;
       case 'toast':
         result = await handleToastWebhook(payload, headers, supabase);
+        break;
+      case 'lightspeed':
+        result = await handleLightspeedWebhook(payload, headers, supabase);
         break;
       default:
         return new Response(

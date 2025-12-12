@@ -117,8 +117,13 @@ function verifyAdyenSignature(payload: any, signature: string, hmacKey: string):
     notificationItem.success
   ].join(':');
 
-  const hmac = createHmac('sha256', Buffer.from(hmacKey, 'hex'));
-  hmac.update(signatureString);
+  // Convert hex key to Uint8Array for Deno
+  const keyBytes = new Uint8Array(hmacKey.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []);
+  const encoder = new TextEncoder();
+  const data = encoder.encode(signatureString);
+  
+  const hmac = createHmac('sha256', keyBytes);
+  hmac.update(data);
   const expectedSignature = hmac.digest('base64');
 
   return signature === expectedSignature;

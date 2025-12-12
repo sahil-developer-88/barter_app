@@ -16,7 +16,7 @@ interface POSConnectionWizardProps {
   onSuccess?: () => void;
 }
 
-type POSProvider = 'square' | 'shopify' | 'adyen' | 'clover' | 'toast';
+type POSProvider = 'square' | 'shopify' | 'adyen' | 'clover' | 'toast' | 'lightspeed';
 
 interface ConnectionConfig {
   provider: POSProvider;
@@ -39,7 +39,8 @@ export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnec
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [authMethod, setAuthMethod] = useState<'oauth' | 'api_key'>('oauth');
   const [shopName, setShopName] = useState('');
-  
+  const [storeName, setStoreName] = useState('');
+
   const [config, setConfig] = useState<ConnectionConfig>({
     provider: 'square',
     storeId: '',
@@ -69,10 +70,15 @@ export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnec
       oauth: true, 
       docs: 'https://docs.clover.com/docs/webhooks' 
     },
-    toast: { 
-      name: 'Toast POS', 
-      oauth: false, 
-      docs: 'https://doc.toasttab.com/doc/devguide/webhooks.html' 
+    toast: {
+      name: 'Toast POS',
+      oauth: false,
+      docs: 'https://doc.toasttab.com/doc/devguide/webhooks.html'
+    },
+    lightspeed: {
+      name: 'Lightspeed Retail',
+      oauth: true,
+      docs: 'https://x-series-api.lightspeedhq.com/docs/webhooks'
     }
   };
 
@@ -98,9 +104,10 @@ export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnec
 
       // Call edge function to initiate OAuth flow
       const { data, error } = await supabase.functions.invoke('pos-oauth-initiate', {
-        body: { 
+        body: {
           provider: config.provider,
-          shopName: config.provider === 'shopify' ? shopName : undefined
+          shopName: config.provider === 'shopify' ? shopName :
+                   config.provider === 'lightspeed' ? storeName : undefined
         }
       });
 
@@ -129,13 +136,14 @@ export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnec
     const provider = params.get('provider');
 
     if (oauthSuccess === 'true' && provider) {
+      // Clean up URL params FIRST to prevent reload loop
+      window.history.replaceState({}, '', window.location.pathname);
+
       toast({
         title: 'Success!',
         description: `Your ${provider} POS has been connected.`,
       });
       onSuccess?.();
-      // Clean up URL params
-      window.history.replaceState({}, '', window.location.pathname);
     }
 
     if (oauthError) {
@@ -299,9 +307,24 @@ export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnec
                     </div>
                   )}
 
-                  <Button 
-                    onClick={handleOAuthConnect} 
-                    disabled={loading || (config.provider === 'shopify' && !shopName)}
+                  {config.provider === 'lightspeed' && (
+                    <div>
+                      <Label htmlFor="store-name">Your Store Name</Label>
+                      <Input
+                        id="store-name"
+                        value={storeName}
+                        onChange={(e) => setStoreName(e.target.value)}
+                        placeholder="your-store"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Enter your store name (e.g., "your-store" from your-store.retail.lightspeed.app)
+                      </p>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handleOAuthConnect}
+                    disabled={loading || (config.provider === 'shopify' && !shopName) || (config.provider === 'lightspeed' && !storeName)}
                     className="w-full"
                     size="lg"
                   >

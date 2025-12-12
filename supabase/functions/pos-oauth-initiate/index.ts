@@ -18,9 +18,17 @@ const getOAuthConfig = (provider: string): OAuthConfig | null => {
   
   switch (provider.toLowerCase()) {
     case 'square':
+      const squareClientId = Deno.env.get('SQUARE_OAUTH_CLIENT_ID') || '';
+      console.log(`Square Client ID: ${squareClientId}`);
+      console.log(`Contains sandbox: ${squareClientId.includes('sandbox')}`);
+      // Use sandbox URL if client ID contains 'sandbox'
+      const squareAuthUrl = squareClientId.includes('sandbox')
+        ? 'https://connect.squareupsandbox.com/oauth2/authorize'
+        : 'https://connect.squareup.com/oauth2/authorize';
+      console.log(`Square Auth URL: ${squareAuthUrl}`);
       return {
-        authUrl: 'https://connect.squareup.com/oauth2/authorize',
-        clientId: Deno.env.get('SQUARE_OAUTH_CLIENT_ID') || '',
+        authUrl: squareAuthUrl,
+        clientId: squareClientId,
         redirectUri: baseRedirectUri,
         scopes: ['MERCHANT_PROFILE_READ', 'PAYMENTS_WRITE', 'PAYMENTS_READ', 'ORDERS_READ']
       };
@@ -28,19 +36,27 @@ const getOAuthConfig = (provider: string): OAuthConfig | null => {
     case 'shopify':
       return {
         authUrl: 'https://SHOP_NAME.myshopify.com/admin/oauth/authorize',
-        clientId: Deno.env.get('SHOPIFY_OAUTH_CLIENT_ID') || '',
+        clientId: Deno.env.get('SHOPIFY_CLIENT_ID') || '',
         redirectUri: baseRedirectUri,
-        scopes: ['read_orders', 'read_products', 'write_webhooks']
+        scopes: ['read_orders', 'read_products']
       };
     
     case 'clover':
       return {
-        authUrl: 'https://www.clover.com/oauth/authorize',
+        authUrl: 'https://sandbox.dev.clover.com/oauth/authorize',
         clientId: Deno.env.get('CLOVER_OAUTH_CLIENT_ID') || '',
         redirectUri: baseRedirectUri,
         scopes: ['payments', 'orders', 'merchants']
       };
-    
+
+    case 'lightspeed':
+      return {
+        authUrl: 'https://secure.retail.lightspeed.app/connect',
+        clientId: Deno.env.get('LIGHTSPEED_OAUTH_CLIENT_ID') || '',
+        redirectUri: baseRedirectUri,
+        scopes: ['employee:all', 'employee:register_sale', 'employee:reports']
+      };
+
     default:
       return null;
   }
@@ -86,13 +102,19 @@ serve(async (req) => {
     // Generate random state token for CSRF protection
     const stateToken = crypto.randomUUID();
 
-    // Store state in database
+    // Store state in database with shop name for providers that need it
+    const metadata: Record<string, any> = {};
+    if (shopName) {
+      metadata.shop_name = shopName;
+    }
+
     const { error: stateError } = await supabase
       .from('oauth_states')
       .insert({
         user_id: user.id,
         state_token: stateToken,
         provider: provider.toLowerCase(),
+        metadata: metadata,
       });
 
     if (stateError) {
@@ -118,11 +140,15 @@ serve(async (req) => {
     const authorizationUrl = `${authUrl}?${params.toString()}`;
 
     console.log(`OAuth flow initiated for ${provider}, user: ${user.id}`);
+    console.log(`Authorization URL: ${authorizationUrl}`);
+    console.log(`Auth URL base: ${authUrl}`);
+    console.log(`Client ID: ${oauthConfig.clientId}`);
+    console.log(`Redirect URI: ${oauthConfig.redirectUri}`);
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         authorizationUrl,
-        state: stateToken 
+        state: stateToken
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

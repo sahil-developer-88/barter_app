@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useAdminAccess } from '@/hooks/useAdminAccess';
+import { useHasRole } from '@/hooks/useHasRole';
+// import { useAdminAccess } from '@/hooks/useAdminAccess';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,8 @@ const Index = () => {
   const [showInstallPromptState, setShowInstallPromptState] = useState(true);
   const { isInstallable, isInstalled } = usePWA();
   const { user } = useAuth();
-  const { isAdmin } = useAdminAccess();
+  const { hasRole: isAdmin } = useHasRole('admin');
+  // const { isAdmin } = useAdminAccess();
   const navigate = useNavigate();
 
   // Fetch real businesses from database
@@ -35,7 +37,7 @@ const Index = () => {
       try {
         setLoading(true);
         const { data, error } = await supabase
-          .from('business_listings')
+          .from('businesses')
           .select('*')
           .eq('status', 'active')
           .order('created_at', { ascending: false });
@@ -73,13 +75,13 @@ const Index = () => {
 
     // Set up real-time subscription
     const subscription = supabase
-      .channel('business_listings_changes')
+      .channel('businesses_changes')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'business_listings'
+          table: 'businesses'
         },
         () => {
           fetchBusinesses();

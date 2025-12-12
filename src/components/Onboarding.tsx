@@ -10,6 +10,7 @@ import BusinessProfileStep from './onboarding/BusinessProfileStep';
 import ServicesPricingStep from './onboarding/ServicesPricingStep';
 import ContactReviewStep from './onboarding/ContactReviewStep';
 import W9Form from './tax/W9Form';
+import W9PdfForm from './tax/W9PdfForm';
 import { z } from 'zod';
 import { toast } from '@/hooks/use-toast';
 
@@ -178,7 +179,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       console.log('Saving W-9 data:', w9Data);
       
       const { error: w9Error } = await supabase
-        .from('w9_tax_info')
+        .from('tax_info')
         .insert({
           user_id: user.id,
           legal_name: w9Data.legalName,
@@ -193,7 +194,9 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           zip_code: w9Data.zipCode,
           account_number: w9Data.accountNumber,
           exempt_from_backup_withholding: w9Data.exemptFromBackupWithholding,
-          certification_agreed: w9Data.certificationAgreed
+          certification_agreed: w9Data.certificationAgreed,
+          signature: w9Data.signature,
+          signature_date: w9Data.signatureDate
         });
 
       if (w9Error) {
@@ -250,7 +253,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       console.log('Creating business listing...');
 
       const { error: listingError } = await supabase
-        .from('business_listings')
+        .from('businesses')
         .insert(listingData);
 
       if (listingError) {
@@ -356,6 +359,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       case 3:
         return <ContactReviewStep formData={formData} setFormData={setFormData} />;
       case 4:
+        // Feature flag: Use PDF W-9 form (set to false to use HTML form)
+        const USE_PDF_W9 = false;
+        const W9Component = USE_PDF_W9 ? W9PdfForm : W9Form;
+
         return (
           <div className="space-y-6">
             <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
@@ -363,7 +370,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 <strong>Optional:</strong> You can complete your W-9 tax information now or skip and do it later from your dashboard. This information is required for tax reporting if you earn income through the platform.
               </p>
             </div>
-            <W9Form 
+            <W9Component
               onSubmit={handleW9Submit}
               onSkip={completeOnboarding}
               isRequired={false}
