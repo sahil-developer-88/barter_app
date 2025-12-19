@@ -1,18 +1,104 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Store, Settings, BarChart3, CreditCard, Plus, Trash2 } from 'lucide-react';
 import { POSConnectionWizard } from './POSConnectionWizard';
+import { POSSetupReminder } from './POSSetupReminder';
 import { usePOSTransactions, usePOSIntegrations } from '@/hooks/usePOSTransactions';
 import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 
 const MerchantDashboard = () => {
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [showPOSReminder, setShowPOSReminder] = useState(false);
+  const [posSetupPreference, setPosSetupPreference] = useState<string | null>(null);
   const { transactions, loading: txLoading } = usePOSTransactions();
   const { integrations, loading: intLoading, disconnect } = usePOSIntegrations();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  // Handle OAuth callback from Square
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthSuccess = params.get('oauth_success');
+    const oauthError = params.get('oauth_error');
+    const provider = params.get('provider');
+
+    if (oauthSuccess === 'true' && provider) {
+      window.history.replaceState({}, '', window.location.pathname);
+      toast({
+        title: 'Success!',
+        description: `Your ${provider.toUpperCase()} POS has been connected successfully.`,
+      });
+    }
+
+    if (oauthError) {
+      window.history.replaceState({}, '', window.location.pathname);
+      toast({
+        title: 'Connection Error',
+        description: decodeURIComponent(oauthError),
+        variant: 'destructive'
+      });
+    }
+  }, [toast]);
+
+  // Fetch profile and check POS setup preference
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return;
+
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('pos_setup_preference')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
+      }
+
+      if (profile) {
+        setPosSetupPreference(profile.pos_setup_preference);
+
+        // Show reminder if preference is 'pending' or 'later' and no POS connected
+        const shouldShow =
+          (profile.pos_setup_preference === 'pending' ||
+           profile.pos_setup_preference === 'later') &&
+          integrations.length === 0;
+
+        setShowPOSReminder(shouldShow);
+      }
+    };
+
+    fetchProfile();
+  }, [user, integrations]);
+
+  const handleDismissReminder = async () => {
+    if (!user) return;
+
+    try {
+      await supabase
+        .from('profiles')
+        .update({ pos_setup_preference: 'not_needed' })
+        .eq('user_id', user.id);
+
+      setShowPOSReminder(false);
+      setPosSetupPreference('not_needed');
+
+      toast({
+        title: 'Reminder dismissed',
+        description: 'You can still connect your POS anytime from the Integrations tab.',
+      });
+    } catch (error) {
+      console.error('Error dismissing reminder:', error);
+    }
+  };
 
   const totalBarterToday = transactions
     .filter(tx => {
@@ -46,6 +132,14 @@ const MerchantDashboard = () => {
           {integrations.length} POS Connected
         </Badge>
       </div>
+
+      {/* POS Setup Reminder */}
+      {showPOSReminder && (
+        <POSSetupReminder
+          onConnect={() => setWizardOpen(true)}
+          onDismiss={handleDismissReminder}
+        />
+      )}
 
       <Tabs defaultValue="analytics" className="w-full">
         <TabsList className="grid w-full grid-cols-3">

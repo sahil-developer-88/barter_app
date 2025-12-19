@@ -18,8 +18,9 @@ import 'react-pdf/dist/Page/TextLayer.css';
 interface W9FormData {
   legalName: string;
   businessName: string;
-  businessType: 'individual' | 'soleProprietor' | 'llc' | 'corporation' | 'partnership' | 'other';
-  otherBusinessType: string;
+  businessType: 'individual' | 'soleProprietor' | 'llc' | 'corporation' | 'partnership';
+  llcClassification?: 'C' | 'S' | 'P'; // C=C corporation, S=corporation, P=Partnership
+  otherBusinessType?: string;
   taxId: string;
   taxIdType: 'ssn' | 'ein';
   address: string;
@@ -37,22 +38,28 @@ interface W9FormProps {
   onSubmit: (data: W9FormData) => void;
   onSkip: () => void;
   isRequired?: boolean;
+  initialAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
 }
 
-const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) => {
+const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true, initialAddress }) => {
   const signatureRef = useRef<SignatureCanvas>(null);
 
   const [formData, setFormData] = useState<W9FormData>({
     legalName: '',
     businessName: '',
-    businessType: 'individual',
+    businessType: '' as any, // No default - user must select
     otherBusinessType: '',
     taxId: '',
-    taxIdType: 'ssn',
-    address: '',
-    city: '',
-    state: '',
-    zipCode: '',
+    taxIdType: '' as any, // No default - user must select
+    address: initialAddress?.street || '',
+    city: initialAddress?.city || '',
+    state: initialAddress?.state || '',
+    zipCode: initialAddress?.zipCode || '',
     accountNumber: '',
     exemptFromBackupWithholding: false,
     certificationAgreed: false,
@@ -72,6 +79,14 @@ const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) 
       newErrors.legalName = 'Legal name is required';
     }
 
+    if (!formData.taxIdType) {
+      newErrors.taxIdType = 'Tax ID type is required';
+    }
+
+    if (!formData.businessType) {
+      newErrors.businessType = 'Federal tax classification is required';
+    }
+
     if (!formData.taxId.trim()) {
       newErrors.taxId = 'Tax ID is required';
     } else {
@@ -79,6 +94,11 @@ const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) 
       if (taxIdClean.length !== 9) {
         newErrors.taxId = 'Tax ID must be 9 digits';
       }
+    }
+
+    // Validate LLC classification if LLC is selected under EIN
+    if (formData.businessType === 'llc' && formData.taxIdType === 'ein' && !formData.llcClassification) {
+      newErrors.llcClassification = 'LLC tax classification is required';
     }
 
     if (!formData.address.trim()) {
@@ -261,70 +281,116 @@ const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) 
             </div>
           </div>
 
-          {/* Business Classification */}
+          {/* Tax ID Type Selection - FIRST */}
           <div>
-            <Label>Federal Tax Classification</Label>
-            <RadioGroup 
-              value={formData.businessType} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, businessType: value as any }))}
+            <Label>Tax ID Type *</Label>
+            <RadioGroup
+              value={formData.taxIdType}
+              onValueChange={(value) => {
+                const newTaxIdType = value as 'ssn' | 'ein';
+                setFormData(prev => ({
+                  ...prev,
+                  taxIdType: newTaxIdType,
+                  taxId: '',
+                  // Clear business type and LLC classification when changing tax ID type
+                  businessType: '' as any,
+                  llcClassification: undefined
+                }));
+              }}
               className="mt-2"
             >
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="individual" id="individual" />
-                <Label htmlFor="individual">Individual/sole proprietor</Label>
+                <RadioGroupItem value="ssn" id="ssn" />
+                <Label htmlFor="ssn">Social Security Number</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="soleProprietor" id="soleProprietor" />
-                <Label htmlFor="soleProprietor">Single-member LLC</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="llc" id="llc" />
-                <Label htmlFor="llc">LLC (multi-member)</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="corporation" id="corporation" />
-                <Label htmlFor="corporation">Corporation</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="partnership" id="partnership" />
-                <Label htmlFor="partnership">Partnership</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="other" id="other" />
-                <Label htmlFor="other">Other</Label>
+                <RadioGroupItem value="ein" id="ein" />
+                <Label htmlFor="ein">Employer Identification Number</Label>
               </div>
             </RadioGroup>
-            
-            {formData.businessType === 'other' && (
-              <Input
-                className="mt-2"
-                value={formData.otherBusinessType}
-                onChange={(e) => setFormData(prev => ({ ...prev, otherBusinessType: e.target.value }))}
-                placeholder="Specify other business type"
-              />
-            )}
+            {errors.taxIdType && <p className="text-sm text-red-600 mt-1">{errors.taxIdType}</p>}
           </div>
 
-          {/* Tax ID Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Business Classification - Shows AFTER Tax ID Type is selected */}
+          {formData.taxIdType && (
             <div>
-              <Label>Tax ID Type *</Label>
-              <RadioGroup 
-                value={formData.taxIdType} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, taxIdType: value as any, taxId: '' }))}
+              <Label>Federal Tax Classification *</Label>
+              <RadioGroup
+                value={formData.businessType}
+                onValueChange={(value) => setFormData(prev => ({
+                  ...prev,
+                  businessType: value as any,
+                  llcClassification: value === 'llc' ? prev.llcClassification : undefined
+                }))}
                 className="mt-2"
               >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="ssn" id="ssn" />
-                  <Label htmlFor="ssn">Social Security Number</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="ein" id="ein" />
-                  <Label htmlFor="ein">Employer Identification Number</Label>
-                </div>
-              </RadioGroup>
-            </div>
+                {/* SSN Options - Only show if SSN is selected */}
+                {formData.taxIdType === 'ssn' && (
+                  <>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="individual" id="individual" />
+                      <Label htmlFor="individual">Individual/sole proprietor</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="soleProprietor" id="soleProprietor" />
+                      <Label htmlFor="soleProprietor">Single-member LLC</Label>
+                    </div>
+                  </>
+                )}
 
+                {/* EIN Options - Only show if EIN is selected */}
+                {formData.taxIdType === 'ein' && (
+                  <>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="llc" id="llc" />
+                      <Label htmlFor="llc">LLC (multi-member)</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="corporation" id="corporation" />
+                      <Label htmlFor="corporation">Corporation</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="partnership" id="partnership" />
+                      <Label htmlFor="partnership">Partnership</Label>
+                    </div>
+                  </>
+                )}
+              </RadioGroup>
+              {errors.businessType && <p className="text-sm text-red-600 mt-1">{errors.businessType}</p>}
+
+              {/* LLC Classification - Only show if LLC is selected under EIN */}
+              {formData.businessType === 'llc' && formData.taxIdType === 'ein' && (
+                <div className="mt-4 pl-6 border-l-2 border-primary">
+                  <Label className="text-sm font-medium">LLC Tax Classification *</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Select how your LLC is taxed
+                  </p>
+                  <RadioGroup
+                    value={formData.llcClassification || ''}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, llcClassification: value as 'C' | 'S' | 'P' }))}
+                    className="mt-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="C" id="llc-c" />
+                      <Label htmlFor="llc-c">C = corporation</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="S" id="llc-s" />
+                      <Label htmlFor="llc-s">S = corporation</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="P" id="llc-p" />
+                      <Label htmlFor="llc-p">P = Partnership</Label>
+                    </div>
+                  </RadioGroup>
+                  {errors.llcClassification && <p className="text-sm text-red-600 mt-1">{errors.llcClassification}</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tax ID Number Input - Shows AFTER Tax ID Type is selected */}
+          {formData.taxIdType && (
             <div>
               <Label htmlFor="taxId">
                 {formData.taxIdType === 'ssn' ? 'Social Security Number' : 'Employer ID Number'} *
@@ -338,7 +404,7 @@ const W9Form: React.FC<W9FormProps> = ({ onSubmit, onSkip, isRequired = true }) 
               />
               {errors.taxId && <p className="text-sm text-red-600 mt-1">{errors.taxId}</p>}
             </div>
-          </div>
+          )}
 
           {/* Address Information */}
           <div className="space-y-4">

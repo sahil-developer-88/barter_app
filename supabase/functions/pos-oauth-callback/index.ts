@@ -368,6 +368,17 @@ serve(async (req) => {
       throw new Error('Failed to store integration');
     }
 
+    // Update profile POS setup preference to 'completed'
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ pos_setup_preference: 'completed' })
+      .eq('user_id', userId);
+
+    if (profileError) {
+      console.error('Error updating profile POS preference:', profileError);
+      // Don't throw error - integration is already saved
+    }
+
     // Register webhooks for Shopify
     if (provider.toLowerCase() === 'shopify' && shop) {
       try {

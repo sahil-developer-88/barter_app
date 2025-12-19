@@ -4,13 +4,27 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OnboardingFormData } from '@/hooks/useOnboardingForm';
 import { MapPin, Mail, Globe, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react';
+import AddressAutocomplete, { AddressDetails } from '@/components/AddressAutocomplete';
 
 interface ContactReviewStepProps {
   formData: OnboardingFormData;
   setFormData: React.Dispatch<React.SetStateAction<OnboardingFormData>>;
 }
+
+// US States list
+const US_STATES = [
+  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware',
+  'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky',
+  'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi',
+  'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico',
+  'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania',
+  'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont',
+  'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming'
+];
 
 const ContactReviewStep: React.FC<ContactReviewStepProps> = ({ formData, setFormData }) => {
   const [showOnlinePresence, setShowOnlinePresence] = useState(false);
@@ -28,23 +42,93 @@ const ContactReviewStep: React.FC<ContactReviewStepProps> = ({ formData, setForm
 
       {/* Contact Information */}
       <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="location" className="text-base font-medium flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            Location *
-          </Label>
-          <Input
-            id="location"
-            value={formData.location}
-            onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-            placeholder="City, State or Region"
-            className="text-base"
-            maxLength={200}
+        {/* Online Only Toggle */}
+        <div className="flex items-center space-x-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <Checkbox
+            id="isOnlineOnly"
+            checked={formData.isOnlineOnly}
+            onCheckedChange={(checked) => {
+              setFormData(prev => ({
+                ...prev,
+                isOnlineOnly: !!checked,
+                // Clear address fields when toggling
+                fullAddress: undefined,
+                street: undefined,
+                city: undefined,
+                state: undefined,
+                zipCode: undefined,
+                latitude: undefined,
+                longitude: undefined,
+                stateOfIncorporation: undefined
+              }));
+            }}
           />
-          <p className="text-xs text-muted-foreground">
-            Where is your business located? (e.g., "San Francisco, CA")
-          </p>
+          <div>
+            <Label htmlFor="isOnlineOnly" className="text-base font-medium cursor-pointer">
+              My business is online only (no physical location)
+            </Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Check this if your business operates entirely online without a physical address
+            </p>
+          </div>
         </div>
+
+        {/* Conditional: Physical Address or State of Incorporation */}
+        {!formData.isOnlineOnly ? (
+          // Physical Business Address
+          <AddressAutocomplete
+            value={formData.fullAddress || ''}
+            onChange={(addressDetails: AddressDetails) => {
+              setFormData(prev => ({
+                ...prev,
+                fullAddress: addressDetails.fullAddress,
+                street: addressDetails.street,
+                city: addressDetails.city,
+                state: addressDetails.state,
+                zipCode: addressDetails.zipCode,
+                location: `${addressDetails.city}, ${addressDetails.state}`, // Backward compatibility
+                latitude: addressDetails.lat,
+                longitude: addressDetails.lng
+              }));
+            }}
+            label="Business Address"
+            placeholder="Start typing your business address..."
+            required={true}
+          />
+        ) : (
+          // Online Only: State of Incorporation
+          <div className="space-y-2">
+            <Label htmlFor="stateOfIncorporation" className="text-base font-medium flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              State of Incorporation *
+            </Label>
+            <Select
+              value={formData.stateOfIncorporation || ''}
+              onValueChange={(value) => {
+                setFormData(prev => ({
+                  ...prev,
+                  stateOfIncorporation: value,
+                  state: value, // Also set state field
+                  location: value // Backward compatibility
+                }));
+              }}
+            >
+              <SelectTrigger className="text-base">
+                <SelectValue placeholder="Select state" />
+              </SelectTrigger>
+              <SelectContent>
+                {US_STATES.map((state) => (
+                  <SelectItem key={state} value={state}>
+                    {state}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Select the state where your business is legally incorporated
+            </p>
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="contactMethod" className="text-base font-medium flex items-center gap-2">
@@ -207,11 +291,6 @@ const ContactReviewStep: React.FC<ContactReviewStepProps> = ({ formData, setForm
                   <span className="text-sm text-muted-foreground">—</span>
                 )}
               </div>
-            </div>
-
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Estimated Monthly Value</p>
-              <p className="text-base font-semibold">${formData.estimatedValue || '—'}</p>
             </div>
 
             {formData.pricedItems.length > 0 && (

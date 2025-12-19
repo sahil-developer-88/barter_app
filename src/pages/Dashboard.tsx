@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Pause, 
-  Play, 
-  MessageSquare, 
-  Coins, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Pause,
+  Play,
+  MessageSquare,
+  Coins,
   User,
   Star,
   Eye,
@@ -21,7 +21,7 @@ import {
   Package,
   CreditCard
 } from "lucide-react";
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import TaxReporting from '@/components/tax/TaxReporting';
 import FavoritesList from '@/components/favorites/FavoritesList';
 import OrderTracking from '@/components/orders/OrderTracking';
@@ -29,9 +29,18 @@ import ReviewSystem from '@/components/reviews/ReviewSystem';
 import ReferralSystem from '@/components/referrals/ReferralSystem';
 import QRCodeSystem from '@/components/qr/QRCodeSystem';
 import MixedPayment from '@/components/payment/MixedPayment';
+import { POSSetupReminder } from '@/components/merchant/POSSetupReminder';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
+  const [showPOSReminder, setShowPOSReminder] = useState(false);
+  const [posSetupPreference, setPosSetupPreference] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Mock data
   const userStats = {
@@ -114,6 +123,58 @@ const Dashboard = () => {
     }
   ];
 
+  // Fetch profile and check POS setup preference
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return;
+
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('pos_setup_preference')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
+      }
+
+      if (profile) {
+        setPosSetupPreference(profile.pos_setup_preference);
+
+        // Show reminder if preference is 'pending' or 'later'
+        const shouldShow =
+          profile.pos_setup_preference === 'pending' ||
+          profile.pos_setup_preference === 'later';
+
+        setShowPOSReminder(shouldShow);
+      }
+    };
+
+    fetchProfile();
+  }, [user]);
+
+  const handleDismissReminder = async () => {
+    if (!user) return;
+
+    try {
+      await supabase
+        .from('profiles')
+        .update({ pos_setup_preference: 'not_needed' })
+        .eq('user_id', user.id);
+
+      setShowPOSReminder(false);
+      setPosSetupPreference('not_needed');
+
+      toast({
+        title: 'Reminder dismissed',
+        description: 'You can still connect your POS anytime from the Merchant tab.',
+      });
+    } catch (error) {
+      console.error('Error dismissing reminder:', error);
+    }
+  };
+
   const handleMixedPayment = (payment: { barterPoints: number; cashAmount: number }) => {
     console.log('Mixed payment submitted:', payment);
   };
@@ -133,6 +194,14 @@ const Dashboard = () => {
             </Link>
           </Button>
         </div>
+
+        {/* POS Setup Reminder */}
+        {showPOSReminder && (
+          <POSSetupReminder
+            onConnect={() => navigate('/merchant-dashboard')}
+            onDismiss={handleDismissReminder}
+          />
+        )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-10">

@@ -117,13 +117,12 @@ function verifyAdyenSignature(payload: any, signature: string, hmacKey: string):
     notificationItem.success
   ].join(':');
 
-  // Convert hex key to Uint8Array for Deno
-  const keyBytes = new Uint8Array(hmacKey.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []);
-  const encoder = new TextEncoder();
-  const data = encoder.encode(signatureString);
+  // Convert hex key to Buffer for Node crypto
+  const keyBuffer = Buffer.from(hmacKey, 'hex');
+  const signatureBuffer = Buffer.from(signatureString, 'utf8');
   
-  const hmac = createHmac('sha256', keyBytes);
-  hmac.update(data);
+  const hmac = createHmac('sha256', keyBuffer);
+  hmac.update(signatureBuffer);
   const expectedSignature = hmac.digest('base64');
 
   return signature === expectedSignature;

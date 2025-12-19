@@ -11,6 +11,7 @@ import ServicesPricingStep from './onboarding/ServicesPricingStep';
 import ContactReviewStep from './onboarding/ContactReviewStep';
 import W9Form from './tax/W9Form';
 import W9PdfForm from './tax/W9PdfForm';
+import { POSSetupStep } from './onboarding/POSSetupStep';
 import { z } from 'zod';
 import { toast } from '@/hooks/use-toast';
 
@@ -27,8 +28,6 @@ const businessBasicsSchema = z.object({
 
 const servicesSchema = z.object({
   servicesOffered: z.array(z.string()).min(1, "At least one service is required"),
-  wantingInReturn: z.array(z.string()).min(1, "At least one service wanted is required"),
-  estimatedValue: z.string().min(1, "Estimated value is required"),
 });
 
 const contactLocationSchema = z.object({
@@ -38,16 +37,18 @@ const contactLocationSchema = z.object({
 
 const stepTitles = [
   "Business Profile",
-  "Services & Pricing", 
+  "Services & Pricing",
   "Contact & Review",
-  "Tax Information"
+  "Tax Information",
+  "POS Integration"
 ];
 
 const steps = [
   "Profile",
-  "Services", 
+  "Services",
   "Contact",
-  "Tax"
+  "Tax",
+  "POS"
 ];
 
 const ONBOARDING_BACKUP_KEY = 'barterex_onboarding_backup';
@@ -140,7 +141,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   }, [formData, profileChecked, user]);
 
   const nextStep = () => {
-    if (step < 4) setStep(step + 1);
+    if (step < 5) setStep(step + 1);
   };
 
   const prevStep = () => {
@@ -161,6 +162,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           return { valid: true };
         case 4:
           return { valid: true }; // W9 is optional
+        case 5:
+          return { valid: true }; // POS setup is optional
         default:
           return { valid: false, error: 'Invalid step' };
       }
@@ -174,10 +177,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
   const handleW9Submit = async (w9Data: any) => {
     if (!user) return;
-    
+
     try {
       console.log('Saving W-9 data:', w9Data);
-      
+
       const { error: w9Error } = await supabase
         .from('tax_info')
         .insert({
@@ -185,7 +188,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           legal_name: w9Data.legalName,
           business_name: w9Data.businessName,
           business_type: w9Data.businessType,
-          other_business_type: w9Data.otherBusinessType,
+          llc_classification: w9Data.llcClassification,
           tax_id: w9Data.taxId,
           tax_id_type: w9Data.taxIdType,
           address: w9Data.address,
@@ -205,13 +208,49 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       }
 
       console.log('W-9 saved successfully');
-      completeOnboarding();
+      toast({
+        title: "W-9 saved",
+        description: "Your tax information has been saved successfully.",
+      });
+      nextStep(); // Go to POS setup step
     } catch (error: any) {
       console.error('Error saving W-9:', error);
       setError(error.message || 'Failed to save W-9 information');
       toast({
         title: "Error saving W-9",
         description: error.message || 'Failed to save W-9 information',
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handlePOSSetupComplete = async (preference: string) => {
+    if (!user) return;
+
+    try {
+      console.log('Saving POS setup preference:', preference);
+
+      // Update profile with POS setup preference
+      const { error: prefError } = await supabase
+        .from('profiles')
+        .update({ pos_setup_preference: preference })
+        .eq('user_id', user.id);
+
+      if (prefError) {
+        console.error('Error saving POS preference:', prefError);
+        throw new Error(`Failed to save POS preference: ${prefError.message}`);
+      }
+
+      console.log('POS preference saved successfully');
+
+      // Complete onboarding
+      await completeOnboarding();
+    } catch (error: any) {
+      console.error('Error saving POS preference:', error);
+      setError(error.message || 'Failed to save POS preference');
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to save POS preference',
         variant: "destructive"
       });
     }
@@ -242,7 +281,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         category: formData.category,
         description: formData.description || '',
         services_offered: formData.servicesOffered,
-        wanting_in_return: formData.wantingInReturn,
+        wanting_in_return: formData.wantingInReturn || [],
         estimated_value: parseFloat(formData.estimatedValue) || 0,
         location: formData.location,
         contact_method: formData.contactMethod,
@@ -372,10 +411,16 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             </div>
             <W9Component
               onSubmit={handleW9Submit}
-              onSkip={completeOnboarding}
+              onSkip={nextStep}
               isRequired={false}
+              initialAddress={{
+                street: formData.street,
+                city: formData.city,
+                state: formData.state,
+                zipCode: formData.zipCode
+              }}
             />
-            
+
             <div className="flex justify-between pt-6">
               <Button
                 variant="outline"
@@ -384,15 +429,22 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
               >
                 Previous
               </Button>
-              
+
               <Button
-                onClick={completeOnboarding}
+                onClick={nextStep}
                 disabled={loading}
               >
-                {loading ? 'Completing...' : 'Skip & Complete Setup'}
+                {loading ? 'Saving...' : 'Skip & Continue'}
               </Button>
             </div>
           </div>
+        );
+      case 5:
+        return (
+          <POSSetupStep
+            onComplete={handlePOSSetupComplete}
+            onBack={prevStep}
+          />
         );
       default:
         return null;
@@ -425,7 +477,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-4xl shadow-lg">
         <CardHeader className="space-y-4">
-          <OnboardingProgress currentStep={step} totalSteps={4} steps={steps} />
+          <OnboardingProgress currentStep={step} totalSteps={5} steps={steps} />
           <div>
             <CardTitle className="text-2xl">{stepTitles[step - 1]}</CardTitle>
             <CardDescription className="text-base mt-2">
@@ -433,6 +485,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
               {step === 2 && "Define what you offer and what you're looking to trade"}
               {step === 3 && "Add contact details and review your profile"}
               {step === 4 && "Optional tax information for compliance"}
+              {step === 5 && "Connect your POS system for automatic transaction tracking"}
             </CardDescription>
           </div>
         </CardHeader>
@@ -462,7 +515,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 disabled={!isStepValid() || loading}
                 size="lg"
               >
-                {loading ? 'Saving...' : step === 3 ? 'Continue to Tax Info' : 'Next'}
+                {loading ? 'Saving...' : 'Next'}
               </Button>
             </div>
           )}

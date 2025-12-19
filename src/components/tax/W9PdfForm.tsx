@@ -13,8 +13,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 interface W9FormData {
   legalName: string;
   businessName: string;
-  businessType: 'individual' | 'soleProprietor' | 'llc' | 'corporation' | 'partnership' | 'other';
-  otherBusinessType: string;
+  businessType: 'individual' | 'soleProprietor' | 'llc' | 'corporation' | 'partnership';
+  llcClassification?: 'C' | 'S' | 'P'; // C=C corporation, S=S corporation, P=Partnership
+  otherBusinessType?: string;
   taxId: string;
   taxIdType: 'ssn' | 'ein';
   address: string;

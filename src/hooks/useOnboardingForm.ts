@@ -5,9 +5,18 @@ export interface OnboardingFormData {
   businessName: string;
   category: string;
   servicesOffered: string[];
-  wantingInReturn: string[];
-  estimatedValue: string;
-  location: string;
+  wantingInReturn?: string[]; // Optional - removed from form
+  estimatedValue?: string; // Optional - removed from form
+  location: string; // Kept for backward compatibility
+  isOnlineOnly: boolean; // New: Is business online-only?
+  fullAddress?: string; // New: Complete formatted address from Google
+  street?: string; // New: Street address
+  city?: string; // New: City
+  state?: string; // New: State (for both physical and online-only)
+  zipCode?: string; // New: ZIP code
+  stateOfIncorporation?: string; // New: For online-only businesses
+  latitude?: number; // New: GPS coordinates
+  longitude?: number; // New: GPS coordinates
   contactMethod: string;
   description: string;
   website: string;
@@ -17,7 +26,7 @@ export interface OnboardingFormData {
     facebook: string;
     linkedin: string;
   };
-  pricedItems: Array<{ name: string; price: number; points: number }>;
+  pricedItems?: Array<{ name: string; price: number; points: number }>; // Optional - removed from form
   barterPercentage: number;
   businessEIN?: string;
   businessLicense?: string;
@@ -32,6 +41,7 @@ export const useOnboardingForm = () => {
     wantingInReturn: [],
     estimatedValue: '',
     location: '',
+    isOnlineOnly: false,
     contactMethod: '',
     description: '',
     website: '',

@@ -4,7 +4,7 @@ interface W9FormData {
   legalName: string;
   businessName: string;
   businessType: 'individual' | 'soleProprietor' | 'llc' | 'corporation' | 'partnership' | 'other';
-  otherBusinessType: string;
+  otherBusinessType?: string;
   taxId: string;
   taxIdType: 'ssn' | 'ein';
   address: string;

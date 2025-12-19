@@ -22,8 +22,6 @@ const suggestedServices = {
 
 const ServicesPricingStep: React.FC<ServicesPricingStepProps> = ({ formData, setFormData }) => {
   const [newService, setNewService] = useState('');
-  const [newWant, setNewWant] = useState('');
-  const [newItem, setNewItem] = useState({ name: '', price: '' });
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   const suggestions = suggestedServices[formData.category as keyof typeof suggestedServices] || [];
@@ -44,46 +42,6 @@ const ServicesPricingStep: React.FC<ServicesPricingStepProps> = ({ formData, set
     setFormData(prev => ({
       ...prev,
       servicesOffered: prev.servicesOffered.filter(s => s !== service)
-    }));
-  };
-
-  const addWant = () => {
-    if (newWant.trim() && !formData.wantingInReturn.includes(newWant.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        wantingInReturn: [...prev.wantingInReturn, newWant.trim()]
-      }));
-      setNewWant('');
-    }
-  };
-
-  const removeWant = (want: string) => {
-    setFormData(prev => ({
-      ...prev,
-      wantingInReturn: prev.wantingInReturn.filter(w => w !== want)
-    }));
-  };
-
-  const addPricedItem = () => {
-    if (newItem.name.trim() && newItem.price) {
-      const price = Number(newItem.price);
-      const points = Math.round(price / 10);
-      setFormData(prev => ({
-        ...prev,
-        pricedItems: [...prev.pricedItems, { 
-          name: newItem.name.trim(), 
-          price, 
-          points 
-        }]
-      }));
-      setNewItem({ name: '', price: '' });
-    }
-  };
-
-  const removePricedItem = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      pricedItems: prev.pricedItems.filter((_, i) => i !== index)
     }));
   };
 
@@ -111,19 +69,19 @@ const ServicesPricingStep: React.FC<ServicesPricingStepProps> = ({ formData, set
               type="number"
               value={formData.barterPercentage || 20}
               onChange={(e) => {
-                const value = Math.min(100, Math.max(0, Number(e.target.value)));
+                const value = Math.min(30, Math.max(0, Number(e.target.value)));
                 setFormData(prev => ({ ...prev, barterPercentage: value }));
               }}
               placeholder="20"
               min="0"
-              max="100"
+              max="30"
               step="5"
               className="text-base w-32"
             />
             <span className="text-2xl font-bold text-blue-600">{formData.barterPercentage || 20}%</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            The percentage of each transaction you're willing to accept in barter instead of cash. 
+            The percentage of each transaction you're willing to accept in barter instead of cash (0-30%).
             For example, 20% means on a $100 sale, you'd accept $20 in barter points and $80 in cash.
           </p>
         </div>
@@ -165,6 +123,14 @@ const ServicesPricingStep: React.FC<ServicesPricingStepProps> = ({ formData, set
                   {suggestion}
                 </Badge>
               ))}
+              <Badge
+                variant="outline"
+                className="cursor-pointer hover:bg-blue-100 transition-colors border-dashed"
+                onClick={() => setShowSuggestions(false)}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Other (type custom)
+              </Badge>
             </div>
           </div>
         )}
@@ -188,113 +154,6 @@ const ServicesPricingStep: React.FC<ServicesPricingStepProps> = ({ formData, set
         )}
       </div>
 
-      {/* Services Wanted */}
-      <div className="space-y-3">
-        <Label className="text-base font-medium flex items-center gap-2">
-          <Search className="h-4 w-4" />
-          What You're Looking For *
-        </Label>
-        <div className="flex gap-2">
-          <Input
-            value={newWant}
-            onChange={(e) => setNewWant(e.target.value)}
-            placeholder="e.g., Marketing Services, Accounting, Photography"
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addWant())}
-            className="text-base"
-          />
-          <Button onClick={addWant} size="sm" type="button">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {formData.wantingInReturn.map((want) => (
-            <Badge key={want} variant="outline" className="pr-1 text-sm py-1">
-              {want}
-              <button
-                onClick={() => removeWant(want)}
-                className="ml-2 hover:text-destructive transition-colors"
-                type="button"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-        {formData.wantingInReturn.length === 0 && (
-          <p className="text-xs text-muted-foreground">Add at least one service you're looking for</p>
-        )}
-      </div>
-
-      {/* Estimated Value */}
-      <div className="space-y-2">
-        <Label htmlFor="estimatedValue" className="text-base font-medium flex items-center gap-2">
-          <DollarSign className="h-4 w-4" />
-          Estimated Monthly Value (USD) *
-        </Label>
-        <Input
-          id="estimatedValue"
-          type="number"
-          value={formData.estimatedValue}
-          onChange={(e) => setFormData(prev => ({ ...prev, estimatedValue: e.target.value }))}
-          placeholder="500"
-          min="0"
-          step="50"
-          className="text-base"
-        />
-        <p className="text-xs text-muted-foreground">
-          Approximate monthly value of services you can provide (helps with matching)
-        </p>
-      </div>
-
-      {/* Priced Items - Optional */}
-      <div className="space-y-3 pt-4 border-t">
-        <div>
-          <Label className="text-base font-medium">Priced Items/Services (Optional)</Label>
-          <p className="text-xs text-muted-foreground mt-1">
-            Add specific items with prices for barter point purchases (1 point = $10)
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <Input
-            value={newItem.name}
-            onChange={(e) => setNewItem(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="Item/Service name"
-          />
-          <div className="flex gap-2">
-            <Input
-              type="number"
-              value={newItem.price}
-              onChange={(e) => setNewItem(prev => ({ ...prev, price: e.target.value }))}
-              placeholder="Price ($)"
-              min="0"
-            />
-            <Button onClick={addPricedItem} size="sm" type="button">
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        {formData.pricedItems.length > 0 && (
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {formData.pricedItems.map((item, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-secondary rounded-lg">
-                <div>
-                  <span className="font-medium text-sm">{item.name}</span>
-                  <div className="text-xs text-muted-foreground">
-                    ${item.price} • {item.points} points
-                  </div>
-                </div>
-                <button
-                  onClick={() => removePricedItem(index)}
-                  className="text-destructive hover:text-destructive/80 transition-colors"
-                  type="button"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 };
