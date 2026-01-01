@@ -11,13 +11,87 @@ interface ServicesPricingStepProps {
   setFormData: React.Dispatch<React.SetStateAction<OnboardingFormData>>;
 }
 
-// Suggested services for quick adding
+// Comprehensive suggested services for ALL categories
 const suggestedServices = {
-  'Professional Services': ['Consulting', 'Legal Services', 'Accounting', 'Business Planning'],
-  'Creative & Design': ['Logo Design', 'Web Design', 'Graphic Design', 'Photography', 'Video Production'],
-  'Marketing & Advertising': ['Social Media Marketing', 'SEO', 'Content Writing', 'Email Marketing'],
-  'Technology & IT': ['Web Development', 'App Development', 'IT Support', 'Software Development'],
-  'Health & Wellness': ['Fitness Training', 'Nutrition Consulting', 'Massage Therapy', 'Life Coaching'],
+  'Professional Services': [
+    'Consulting', 'Legal Services', 'Accounting', 'Business Planning',
+    'Tax Preparation', 'Bookkeeping', 'Financial Planning', 'HR Consulting',
+    'Real Estate Services', 'Insurance Services', 'Notary Services', 'Payroll Services'
+  ],
+  'Creative & Design': [
+    'Logo Design', 'Web Design', 'Graphic Design', 'Photography', 'Video Production',
+    'Branding', 'UI/UX Design', 'Illustration', 'Animation', 'Print Design',
+    'Packaging Design', 'Product Photography', 'Event Photography', '3D Modeling'
+  ],
+  'Marketing & Advertising': [
+    'Social Media Marketing', 'SEO', 'Content Writing', 'Email Marketing',
+    'Google Ads', 'Facebook Ads', 'Influencer Marketing', 'PR Services',
+    'Market Research', 'Brand Strategy', 'Copywriting', 'Video Marketing', 'PPC Campaigns'
+  ],
+  'Technology & IT': [
+    'Web Development', 'App Development', 'IT Support', 'Software Development',
+    'Cloud Services', 'Cybersecurity', 'Network Setup', 'Data Analytics',
+    'E-commerce Setup', 'WordPress Development', 'Database Management', 'Tech Consulting'
+  ],
+  'Health & Wellness': [
+    'Fitness Training', 'Nutrition Consulting', 'Massage Therapy', 'Life Coaching',
+    'Yoga Classes', 'Physical Therapy', 'Mental Health Counseling', 'Acupuncture',
+    'Chiropractic Care', 'Personal Training', 'Weight Loss Coaching', 'Meditation Classes'
+  ],
+  'Retail': [
+    'Clothing Sales', 'Shoes & Footwear', 'Accessories', 'Jewelry', 'Electronics',
+    'Home Goods', 'Furniture', 'Books & Magazines', 'Toys & Games', 'Sports Equipment',
+    'Pet Supplies', 'Beauty Products', 'Gifts & Souvenirs', 'Art & Crafts Supplies'
+  ],
+  'Clothing & Fashion': [
+    "Women's Clothing", "Men's Clothing", "Kids Clothing", "Baby Clothing",
+    'Activewear', 'Formal Wear', 'Casual Wear', 'Vintage Clothing',
+    'Plus Size Clothing', 'Maternity Wear', 'Swimwear', 'Outerwear',
+    'Underwear & Lingerie', 'Shoes & Boots', 'Handbags & Purses',
+    'Belts & Accessories', 'Hats & Caps', 'Scarves & Shawls', 'Sunglasses & Eyewear',
+    'Custom Tailoring', 'Alterations & Repairs', 'Clothing Rental', 'Costume Rentals'
+  ],
+  'Food & Beverage': [
+    'Restaurant Dining', 'Cafe & Coffee Shop', 'Bakery', 'Catering Services', 'Food Truck',
+    'Bar & Cocktails', 'Nightclub', 'Meal Prep Services', 'Private Chef',
+    'Cooking Classes', 'Grocery Delivery', 'Specialty Foods', 'Organic Products',
+    'Food & Wine Pairing', 'Bartending Services'
+  ],
+  'Home Services': [
+    'Cleaning Services', 'Landscaping & Lawn Care', 'Plumbing', 'Electrical Work', 'HVAC Services',
+    'Painting & Decorating', 'Carpentry', 'Roofing', 'Pool Maintenance', 'Pest Control',
+    'Moving & Storage', 'Handyman Services', 'Interior Design', 'Home Staging',
+    'Window Cleaning', 'Gutter Cleaning', 'Pressure Washing'
+  ],
+  'Automotive': [
+    'Auto Repair & Maintenance', 'Oil Changes', 'Tire Services', 'Car Detailing', 'Car Wash',
+    'Body Work & Collision Repair', 'Towing Services', 'Mobile Mechanic', 'Paint & Bodywork',
+    'Window Tinting', 'Brake Services', 'Transmission Repair', 'Engine Diagnostics'
+  ],
+  'Beauty & Personal Care': [
+    'Hair Salon Services', 'Barbershop', 'Nail Salon & Manicures', 'Spa Services', 'Makeup Artist',
+    'Skincare Treatments', 'Waxing & Hair Removal', 'Eyelash Extensions', 'Tattoo & Piercing',
+    'Tanning Services', 'Facials', 'Body Treatments', 'Brow Services', 'Hair Color & Highlights'
+  ],
+  'Education & Training': [
+    'Tutoring Services', 'Music Lessons', 'Art Classes', 'Dance Classes', 'Language Classes',
+    'Test Prep & SAT/ACT', 'Career Coaching', 'Online Courses', 'Workshops & Seminars',
+    'Professional Development', 'Computer Training', 'Public Speaking Coaching'
+  ],
+  'Entertainment & Events': [
+    'Event Planning', 'DJ Services', 'Live Music & Bands', 'Photography & Videography',
+    'Party Rentals', 'Event Catering', 'Venue Rental', 'Entertainment Booking',
+    'Photo Booth Rental', 'Wedding Planning', 'Corporate Events', 'Kids Parties'
+  ],
+  'Construction & Trades': [
+    'General Contracting', 'Remodeling', 'Kitchen & Bath Renovation', 'Flooring Installation',
+    'Drywall & Painting', 'Tile Work', 'Concrete Work', 'Fencing', 'Deck Building',
+    'Window Installation', 'Door Installation', 'Insulation Services'
+  ],
+  'Pet Services': [
+    'Veterinary Care', 'Pet Grooming', 'Dog Walking', 'Pet Sitting', 'Pet Training',
+    'Pet Boarding', 'Mobile Vet Services', 'Pet Photography', 'Pet Supplies'
+  ]
 };
 
 const ServicesPricingStep: React.FC<ServicesPricingStepProps> = ({ formData, setFormData }) => {
@@ -67,22 +141,27 @@ const ServicesPricingStep: React.FC<ServicesPricingStepProps> = ({ formData, set
             <Input
               id="barterPercentage"
               type="number"
-              value={formData.barterPercentage || 20}
+              value={formData.barterPercentage || 100}
               onChange={(e) => {
-                const value = Math.min(30, Math.max(0, Number(e.target.value)));
+                const value = Math.min(100, Math.max(10, Number(e.target.value)));
                 setFormData(prev => ({ ...prev, barterPercentage: value }));
               }}
-              placeholder="20"
-              min="0"
-              max="30"
+              placeholder="100"
+              min="10"
+              max="100"
               step="5"
               className="text-base w-32"
             />
-            <span className="text-2xl font-bold text-blue-600">{formData.barterPercentage || 20}%</span>
+            <span className="text-2xl font-bold text-blue-600">{formData.barterPercentage || 100}%</span>
+            {formData.barterPercentage === 100 && (
+              <Badge className="bg-green-600 hover:bg-green-700">
+                Recommended
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
-            The percentage of each transaction you're willing to accept in barter instead of cash (0-30%).
-            For example, 20% means on a $100 sale, you'd accept $20 in barter points and $80 in cash.
+            The percentage of each transaction you're willing to accept in barter instead of cash (10-100%).
+            For example, 100% means full barter transactions, 50% means on a $100 sale, you'd accept $50 in barter points and $50 in cash.
           </p>
         </div>
       </div>

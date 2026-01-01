@@ -140,6 +140,13 @@ export type Database = {
             foreignKeyName: "messages_listing_id_fkey"
             columns: ["listing_id"]
             isOneToOne: false
+            referencedRelation: "business_listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
             referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
@@ -211,14 +218,17 @@ export type Database = {
       pos_integrations: {
         Row: {
           access_token: string
+          access_token_encrypted: string | null
           auth_method: string | null
           config: Json | null
           created_at: string
+          encryption_nonce: string | null
           id: string
           last_sync_at: string | null
           merchant_id: string | null
           provider: string
           refresh_token: string | null
+          refresh_token_encrypted: string | null
           scopes: string[] | null
           status: string
           store_id: string | null
@@ -228,14 +238,17 @@ export type Database = {
         }
         Insert: {
           access_token: string
+          access_token_encrypted?: string | null
           auth_method?: string | null
           config?: Json | null
           created_at?: string
+          encryption_nonce?: string | null
           id?: string
           last_sync_at?: string | null
           merchant_id?: string | null
           provider: string
           refresh_token?: string | null
+          refresh_token_encrypted?: string | null
           scopes?: string[] | null
           status?: string
           store_id?: string | null
@@ -245,14 +258,17 @@ export type Database = {
         }
         Update: {
           access_token?: string
+          access_token_encrypted?: string | null
           auth_method?: string | null
           config?: Json | null
           created_at?: string
+          encryption_nonce?: string | null
           id?: string
           last_sync_at?: string | null
           merchant_id?: string | null
           provider?: string
           refresh_token?: string | null
+          refresh_token_encrypted?: string | null
           scopes?: string[] | null
           status?: string
           store_id?: string | null
@@ -361,6 +377,219 @@ export type Database = {
           },
         ]
       }
+      product_categories: {
+        Row: {
+          barter_enabled: boolean | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_restricted: boolean | null
+          name: string
+          restriction_reason: string | null
+          slug: string
+          updated_at: string | null
+        }
+        Insert: {
+          barter_enabled?: boolean | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_restricted?: boolean | null
+          name: string
+          restriction_reason?: string | null
+          slug: string
+          updated_at?: string | null
+        }
+        Update: {
+          barter_enabled?: boolean | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_restricted?: boolean | null
+          name?: string
+          restriction_reason?: string | null
+          slug?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      product_sync_progress: {
+        Row: {
+          completed_at: string | null
+          current_item_name: string | null
+          current_step: string | null
+          error: string | null
+          error_items: number
+          id: string
+          pos_integration_id: string | null
+          processed_items: number
+          skipped_items: number
+          started_at: string
+          status: string
+          synced_items: number
+          total_items: number
+          user_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          current_item_name?: string | null
+          current_step?: string | null
+          error?: string | null
+          error_items?: number
+          id?: string
+          pos_integration_id?: string | null
+          processed_items?: number
+          skipped_items?: number
+          started_at?: string
+          status?: string
+          synced_items?: number
+          total_items?: number
+          user_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          current_item_name?: string | null
+          current_step?: string | null
+          error?: string | null
+          error_items?: number
+          id?: string
+          pos_integration_id?: string | null
+          processed_items?: number
+          skipped_items?: number
+          started_at?: string
+          status?: string
+          synced_items?: number
+          total_items?: number
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_sync_progress_pos_integration_id_fkey"
+            columns: ["pos_integration_id"]
+            isOneToOne: false
+            referencedRelation: "pos_integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          barcode: string | null
+          barter_enabled: boolean | null
+          category_id: string | null
+          cost: number | null
+          created_at: string | null
+          currency: string | null
+          custom_barter_percentage: number | null
+          description: string | null
+          external_product_id: string
+          external_variant_id: string | null
+          id: string
+          image_url: string | null
+          images: Json | null
+          is_active: boolean | null
+          is_archived: boolean | null
+          last_synced_at: string | null
+          low_stock_threshold: number | null
+          merchant_id: string
+          metadata: Json | null
+          name: string
+          pos_integration_id: string
+          price: number
+          show_stock_publicly: boolean | null
+          sku: string | null
+          stock_quantity: number | null
+          sync_error: string | null
+          sync_status: string | null
+          upc: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          barcode?: string | null
+          barter_enabled?: boolean | null
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string | null
+          currency?: string | null
+          custom_barter_percentage?: number | null
+          description?: string | null
+          external_product_id: string
+          external_variant_id?: string | null
+          id?: string
+          image_url?: string | null
+          images?: Json | null
+          is_active?: boolean | null
+          is_archived?: boolean | null
+          last_synced_at?: string | null
+          low_stock_threshold?: number | null
+          merchant_id: string
+          metadata?: Json | null
+          name: string
+          pos_integration_id: string
+          price?: number
+          show_stock_publicly?: boolean | null
+          sku?: string | null
+          stock_quantity?: number | null
+          sync_error?: string | null
+          sync_status?: string | null
+          upc?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          barcode?: string | null
+          barter_enabled?: boolean | null
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string | null
+          currency?: string | null
+          custom_barter_percentage?: number | null
+          description?: string | null
+          external_product_id?: string
+          external_variant_id?: string | null
+          id?: string
+          image_url?: string | null
+          images?: Json | null
+          is_active?: boolean | null
+          is_archived?: boolean | null
+          last_synced_at?: string | null
+          low_stock_threshold?: number | null
+          merchant_id?: string
+          metadata?: Json | null
+          name?: string
+          pos_integration_id?: string
+          price?: number
+          show_stock_publicly?: boolean | null
+          sku?: string | null
+          stock_quantity?: number | null
+          sync_error?: string | null
+          sync_status?: string | null
+          upc?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "products_pos_integration_id_fkey"
+            columns: ["pos_integration_id"]
+            isOneToOne: false
+            referencedRelation: "pos_integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -375,6 +604,7 @@ export type Database = {
           location: string | null
           onboarding_completed: boolean | null
           phone: string | null
+          pos_setup_preference: string | null
           updated_at: string
           user_id: string
           website: string | null
@@ -392,6 +622,7 @@ export type Database = {
           location?: string | null
           onboarding_completed?: boolean | null
           phone?: string | null
+          pos_setup_preference?: string | null
           updated_at?: string
           user_id: string
           website?: string | null
@@ -409,6 +640,7 @@ export type Database = {
           location?: string | null
           onboarding_completed?: boolean | null
           phone?: string | null
+          pos_setup_preference?: string | null
           updated_at?: string
           user_id?: string
           website?: string | null
@@ -427,7 +659,7 @@ export type Database = {
           exempt_from_backup_withholding: boolean | null
           id: string
           legal_name: string
-          other_business_type: string | null
+          llc_classification: string | null
           signature: string | null
           signature_date: string | null
           state: string
@@ -448,7 +680,7 @@ export type Database = {
           exempt_from_backup_withholding?: boolean | null
           id?: string
           legal_name: string
-          other_business_type?: string | null
+          llc_classification?: string | null
           signature?: string | null
           signature_date?: string | null
           state: string
@@ -469,7 +701,7 @@ export type Database = {
           exempt_from_backup_withholding?: boolean | null
           id?: string
           legal_name?: string
-          other_business_type?: string | null
+          llc_classification?: string | null
           signature?: string | null
           signature_date?: string | null
           state?: string
@@ -582,19 +814,198 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      business_listings: {
+        Row: {
+          barter_percentage: number | null
+          business_name: string | null
+          category: string | null
+          created_at: string | null
+          description: string | null
+          id: string | null
+          location: string | null
+          services_offered: string[] | null
+          status: string | null
+          user_id: string | null
+          wanting_in_return: string[] | null
+        }
+        Insert: {
+          barter_percentage?: number | null
+          business_name?: string | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          location?: string | null
+          services_offered?: string[] | null
+          status?: string | null
+          user_id?: never
+          wanting_in_return?: string[] | null
+        }
+        Update: {
+          barter_percentage?: number | null
+          business_name?: string | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          location?: string | null
+          services_offered?: string[] | null
+          status?: string | null
+          user_id?: never
+          wanting_in_return?: string[] | null
+        }
+        Relationships: []
+      }
+      products_for_customers: {
+        Row: {
+          barcode: string | null
+          barter_enabled: boolean | null
+          category_id: string | null
+          created_at: string | null
+          description: string | null
+          id: string | null
+          is_active: boolean | null
+          merchant_id: string | null
+          name: string | null
+          price: number | null
+          sku: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          barcode?: string | null
+          barter_enabled?: boolean | null
+          category_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          merchant_id?: string | null
+          name?: string | null
+          price?: number | null
+          sku?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          barcode?: string | null
+          barter_enabled?: boolean | null
+          category_id?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          merchant_id?: string | null
+          name?: string | null
+          price?: number | null
+          sku?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      products_with_eligibility: {
+        Row: {
+          barcode: string | null
+          barter_enabled: boolean | null
+          category_barter_enabled: boolean | null
+          category_id: string | null
+          category_is_restricted: boolean | null
+          category_name: string | null
+          cost: number | null
+          created_at: string | null
+          currency: string | null
+          custom_barter_percentage: number | null
+          description: string | null
+          effective_barter_percentage: number | null
+          external_product_id: string | null
+          external_variant_id: string | null
+          id: string | null
+          image_url: string | null
+          images: Json | null
+          is_active: boolean | null
+          is_archived: boolean | null
+          is_barter_eligible: boolean | null
+          last_synced_at: string | null
+          low_stock_threshold: number | null
+          merchant_id: string | null
+          metadata: Json | null
+          name: string | null
+          pos_integration_id: string | null
+          pos_provider: string | null
+          pos_store_id: string | null
+          price: number | null
+          restriction_reason: string | null
+          sku: string | null
+          stock_quantity: number | null
+          sync_error: string | null
+          sync_status: string | null
+          upc: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "products_pos_integration_id_fkey"
+            columns: ["pos_integration_id"]
+            isOneToOne: false
+            referencedRelation: "pos_integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      credit_merchant_balance: {
+        Args: { p_amount: number; p_merchant_id: string }
+        Returns: undefined
+      }
+      debit_user_credits: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
+      get_product_barter_eligibility: {
+        Args: { product_id: string }
+        Returns: {
+          barter_percentage: number
+          is_eligible: boolean
+          reason: string
+        }[]
+      }
       get_public_profile_info: {
         Args: { profile_user_id: string }
         Returns: {
-          avatar_url: string
-          business_name: string
           full_name: string
           id: string
-          user_id: string
         }[]
       }
+      is_product_available: { Args: { p_product_id: string }; Returns: boolean }
+      is_product_restricted: { Args: { product_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

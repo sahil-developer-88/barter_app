@@ -14,6 +14,7 @@ interface POSConnectionWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  onBeforeOAuth?: () => Promise<void>;
 }
 
 type POSProvider = 'square' | 'shopify' | 'adyen' | 'clover' | 'toast' | 'lightspeed';
@@ -32,7 +33,7 @@ interface ConnectionConfig {
  * POS Connection Wizard - Guides merchants through connecting their POS system
  * Supports OAuth flows and API key authentication
  */
-export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnectionWizardProps) {
+export function POSConnectionWizard({ open, onOpenChange, onSuccess, onBeforeOAuth }: POSConnectionWizardProps) {
   const { toast } = useToast();
   const [step, setStep] = useState<'provider' | 'credentials' | 'webhook' | 'testing' | 'complete'>('provider');
   const [loading, setLoading] = useState(false);
@@ -40,6 +41,7 @@ export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnec
   const [authMethod, setAuthMethod] = useState<'oauth' | 'api_key'>('oauth');
   const [shopName, setShopName] = useState('');
   const [storeName, setStoreName] = useState('');
+  const [userBarterPercentage, setUserBarterPercentage] = useState<number>(25);
 
   const [config, setConfig] = useState<ConnectionConfig>({
     provider: 'square',
@@ -48,6 +50,56 @@ export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnec
     webhookUrl: `https://etzwoyyhxvwpdejckpaq.supabase.co/functions/v1/pos-webhook`,
     barterPercentage: 25
   });
+
+  // Fetch user's barter percentage from profile
+  useEffect(() => {
+    const fetchUserBarterPercentage = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('barter_percentage')
+          .eq('user_id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching barter percentage:', error);
+          return;
+        }
+
+        if (profile?.barter_percentage) {
+          setUserBarterPercentage(profile.barter_percentage);
+          setConfig(prev => ({ ...prev, barterPercentage: profile.barter_percentage }));
+        }
+      } catch (error) {
+        console.error('Error fetching user barter percentage:', error);
+      }
+    };
+
+    fetchUserBarterPercentage();
+  }, []);
+
+  // Reset wizard state when dialog closes
+  useEffect(() => {
+    if (!open) {
+      // Reset to initial state when dialog is closed
+      setStep('provider');
+      setLoading(false);
+      setTestResult(null);
+      setAuthMethod('oauth');
+      setShopName('');
+      setStoreName('');
+      setConfig({
+        provider: 'square',
+        storeId: '',
+        apiKey: '',
+        webhookUrl: `https://etzwoyyhxvwpdejckpaq.supabase.co/functions/v1/pos-webhook`,
+        barterPercentage: userBarterPercentage
+      });
+    }
+  }, [open, userBarterPercentage]);
 
   const providerInfo: Record<POSProvider, { name: string; oauth: boolean; docs: string }> = {
     square: { 
@@ -96,8 +148,17 @@ export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnec
   const handleOAuthConnect = async () => {
     setLoading(true);
     try {
+      // Call onBeforeOAuth callback first (e.g., to save onboarding data)
+      if (onBeforeOAuth) {
+        toast({
+          title: 'Saving your data...',
+          description: 'Please wait while we complete your setup.',
+        });
+        await onBeforeOAuth();
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         throw new Error('Not authenticated');
       }
@@ -188,9 +249,21 @@ export function POSConnectionWizard({ open, onOpenChange, onSuccess }: POSConnec
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         throw new Error('Not authenticated');
+      }
+
+      // Deactivate all existing active POS integrations for this user
+      const { error: deactivateError } = await supabase
+        .from('pos_integrations')
+        .update({ status: 'inactive' })
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+
+      if (deactivateError) {
+        console.error('Warning: Failed to deactivate old integrations:', deactivateError);
+        // Don't throw - continue with new integration
       }
 
       // Save POS integration to database

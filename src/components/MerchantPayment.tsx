@@ -320,7 +320,7 @@ const MerchantPayment = () => {
                 <Button
                   variant="outline"
                   className="flex items-center gap-2"
-                  onClick={() => window.open('/merchant-dashboard', '_blank')}
+                  onClick={() => window.open('/merchant/dashboard', '_blank')}
                 >
                   <Settings className="w-4 h-4" />
                   Dashboard

@@ -4,6 +4,7 @@ import { calculateTransactionSplit } from '../utils/split-calculator.ts';
 /**
  * Handle Shopify POS webhook events
  * Docs: https://shopify.dev/docs/api/admin-rest/2023-10/resources/webhook
+ * Supports: orders/create, products/create, products/update, products/delete
  */
 export async function handleShopifyWebhook(
   payload: any,
@@ -15,18 +16,26 @@ export async function handleShopifyWebhook(
   // Verify webhook signature
   const signature = headers['x-shopify-hmac-sha256'];
   const webhookSecret = Deno.env.get('SHOPIFY_WEBHOOK_SECRET');
-  
+
   if (webhookSecret && signature) {
     const isValid = verifyShopifySignature(
       JSON.stringify(payload),
       signature,
       webhookSecret
     );
-    
+
     if (!isValid) {
       console.error('❌ Invalid Shopify signature');
       return { success: false, error: 'Invalid signature' };
     }
+  }
+
+  const topic = headers['x-shopify-topic'];
+  console.log('📦 Webhook topic:', topic);
+
+  // Handle product webhooks
+  if (topic?.startsWith('products/')) {
+    return await handleProductWebhook(topic, payload, headers, supabase);
   }
 
   // Handle order created/updated event
@@ -121,6 +130,173 @@ export async function handleShopifyWebhook(
 }
 
 /**
+ * Handle product webhook events (create, update, delete)
+ */
+async function handleProductWebhook(
+  topic: string,
+  payload: any,
+  headers: any,
+  supabase: any
+): Promise<any> {
+  const shopDomain = headers['x-shopify-shop-domain'];
+
+  // Get merchant integration
+  const { data: integration } = await supabase
+    .from('pos_integrations')
+    .select('user_id, id, config')
+    .eq('provider', 'shopify')
+    .eq('store_id', shopDomain)
+    .single();
+
+  if (!integration) {
+    console.error('❌ No integration found for shop:', shopDomain);
+    return { success: false, error: 'Integration not found' };
+  }
+
+  // Get merchant's first business for product association
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('id')
+    .eq('user_id', integration.user_id)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .single();
+
+  if (!business) {
+    console.error('❌ No business found for merchant:', integration.user_id);
+    return { success: false, error: 'Business not found' };
+  }
+
+  const externalProductId = payload.id.toString();
+
+  // Handle product deletion
+  if (topic === 'products/delete') {
+    console.log('🗑️ Deleting product:', externalProductId);
+
+    const { error } = await supabase
+      .from('products')
+      .update({
+        is_active: false,
+        is_archived: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('external_product_id', externalProductId)
+      .eq('pos_integration_id', integration.id);
+
+    if (error) {
+      console.error('❌ Error archiving product:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Product archived successfully');
+    return { success: true, action: 'deleted' };
+  }
+
+  // Handle product create/update
+  const variants = payload.variants || [];
+  const mainVariant = variants[0] || {};
+
+  // Get or create product category
+  let categoryId = null;
+  if (payload.product_type) {
+    const { data: category } = await supabase
+      .from('product_categories')
+      .select('id')
+      .eq('name', payload.product_type)
+      .single();
+
+    if (category) {
+      categoryId = category.id;
+    } else {
+      // Create new category
+      const { data: newCategory } = await supabase
+        .from('product_categories')
+        .insert({
+          name: payload.product_type,
+          barter_enabled: true,
+          is_restricted: false
+        })
+        .select('id')
+        .single();
+
+      categoryId = newCategory?.id;
+    }
+  }
+
+  // Check if product already exists
+  const { data: existingProduct } = await supabase
+    .from('products')
+    .select('id')
+    .eq('external_product_id', externalProductId)
+    .eq('pos_integration_id', integration.id)
+    .single();
+
+  const productData = {
+    merchant_id: integration.user_id,
+    business_id: business.id,
+    pos_integration_id: integration.id,
+    external_product_id: externalProductId,
+    external_variant_id: mainVariant.id?.toString(),
+    name: payload.title,
+    description: payload.body_html?.replace(/<[^>]*>/g, '') || null, // Strip HTML
+    sku: mainVariant.sku,
+    barcode: mainVariant.barcode,
+    price: parseFloat(mainVariant.price || 0),
+    cost: parseFloat(mainVariant.compare_at_price || 0),
+    category_id: categoryId,
+    stock_quantity: mainVariant.inventory_quantity || 0,
+    image_url: payload.image?.src || null,
+    is_active: payload.status === 'active',
+    is_archived: false,
+    barter_enabled: true,
+    metadata: {
+      vendor: payload.vendor,
+      tags: payload.tags,
+      variant_count: variants.length,
+      shopify_handle: payload.handle
+    }
+  };
+
+  if (existingProduct) {
+    // Update existing product
+    console.log('📝 Updating product:', externalProductId);
+
+    const { error } = await supabase
+      .from('products')
+      .update({
+        ...productData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', existingProduct.id);
+
+    if (error) {
+      console.error('❌ Error updating product:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Product updated successfully');
+    return { success: true, action: 'updated', product_id: existingProduct.id };
+  } else {
+    // Create new product
+    console.log('➕ Creating product:', payload.title);
+
+    const { data: newProduct, error } = await supabase
+      .from('products')
+      .insert(productData)
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('❌ Error creating product:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Product created successfully');
+    return { success: true, action: 'created', product_id: newProduct.id };
+  }
+}
+
+/**
  * Verify Shopify webhook signature
  */
 function verifyShopifySignature(
@@ -131,6 +307,6 @@ function verifyShopifySignature(
   const hmac = createHmac('sha256', secret);
   hmac.update(body);
   const expectedSignature = hmac.digest('base64');
-  
+
   return signature === expectedSignature;
 }

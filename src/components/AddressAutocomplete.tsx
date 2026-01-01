@@ -2,22 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MapPin, Loader2 } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
-// Fix for default marker icons in React Leaflet
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-  iconUrl: icon,
-  shadowUrl: iconShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41]
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
+// Get Mapbox token from environment variables (Vite). In Lovable preview, .env may not hot-reload,
+// so we keep a safe fallback (Mapbox public tokens are OK to ship client-side).
+const MAPBOX_TOKEN =
+  (import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as string | undefined) ||
+  'pk.eyJ1IjoidmFsdWVodWJleGNoYW5nZSIsImEiOiJjbWprdThvaWQyZ3g1M2RweWk5NzE0cHFhIn0.7HdiwLx7O_Bp5dgstmnj4g';
 
 interface AddressAutocompleteProps {
   value: string;
@@ -38,21 +29,22 @@ export interface AddressDetails {
   lng?: number;
 }
 
-interface NominatimResult {
-  place_id: number;
-  display_name: string;
-  address: {
-    house_number?: string;
-    road?: string;
-    city?: string;
-    town?: string;
-    village?: string;
-    state?: string;
-    postcode?: string;
-    country?: string;
-  };
-  lat: string;
-  lon: string;
+interface MapboxFeature {
+  id: string;
+  place_name: string;
+  center: [number, number]; // [lng, lat]
+  context?: Array<{
+    id: string;
+    text: string;
+    short_code?: string;
+  }>;
+  address?: string;
+  text?: string;
+  place_type?: string[];
+}
+
+interface MapboxGeocodingResponse {
+  features: MapboxFeature[];
 }
 
 const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
@@ -63,12 +55,42 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
   required = true
 }) => {
   const [searchQuery, setSearchQuery] = useState(value);
-  const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
+  const [suggestions, setSuggestions] = useState<MapboxFeature[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
   const debounceTimer = useRef<NodeJS.Timeout>();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const hasGeocodedInitialValue = useRef(false);
+
+  // Geocode initial value to show map when coming back to the page
+  useEffect(() => {
+    if (value && !hasGeocodedInitialValue.current && MAPBOX_TOKEN) {
+      hasGeocodedInitialValue.current = true;
+
+      // Geocode the initial value to get coordinates
+      fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(value)}.json?` +
+        `access_token=${MAPBOX_TOKEN}&` +
+        `limit=1`
+      )
+        .then(res => res.json())
+        .then((data: MapboxGeocodingResponse) => {
+          if (data.features && data.features.length > 0) {
+            const feature = data.features[0];
+            setSelectedLocation({
+              lat: feature.center[1],
+              lng: feature.center[0],
+              address: feature.place_name
+            });
+          }
+        })
+        .catch(err => console.error('Failed to geocode initial value:', err));
+    }
+  }, [value, MAPBOX_TOKEN]);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -82,39 +104,111 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Search addresses using Nominatim (OpenStreetMap)
+  // Initialize map when location is selected
+  useEffect(() => {
+    if (!selectedLocation || !mapContainerRef.current || !MAPBOX_TOKEN) return;
+
+    let isMounted = true;
+
+    // Clean up existing map
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+
+    // Clean up existing marker
+    if (markerRef.current) {
+      markerRef.current.remove();
+      markerRef.current = null;
+    }
+
+    // Dynamically import mapbox-gl
+    import('mapbox-gl').then((mapboxgl) => {
+      if (!isMounted) return;
+
+      try {
+        // mapboxgl is the module, need to access default export
+        const mapboxglLib = mapboxgl.default || mapboxgl;
+
+        // Create new map
+        const map = new mapboxglLib.Map({
+          container: mapContainerRef.current!,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [selectedLocation.lng, selectedLocation.lat],
+          zoom: 15,
+          accessToken: MAPBOX_TOKEN
+        });
+
+        // Add navigation controls
+        map.addControl(new mapboxglLib.NavigationControl(), 'top-right');
+
+        // Create custom marker element
+        const el = document.createElement('div');
+        el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="rgb(239, 68, 68)" stroke="rgb(239, 68, 68)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`;
+        el.style.cursor = 'pointer';
+
+        // Add marker
+        const marker = new mapboxglLib.Marker(el)
+          .setLngLat([selectedLocation.lng, selectedLocation.lat])
+          .addTo(map);
+
+        if (isMounted) {
+          mapRef.current = map;
+          markerRef.current = marker;
+        } else {
+          // Component unmounted before map loaded, clean up
+          marker.remove();
+          map.remove();
+        }
+      } catch (error) {
+        console.error('Mapbox error:', error);
+      }
+    }).catch((error) => {
+      console.error('Failed to load mapbox-gl:', error);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      isMounted = false;
+      if (markerRef.current) {
+        markerRef.current.remove();
+      }
+      if (mapRef.current) {
+        mapRef.current.remove();
+      }
+    };
+  }, [selectedLocation, MAPBOX_TOKEN]);
+
+  // Search addresses using Mapbox Geocoding API
   const searchAddress = async (query: string) => {
     if (!query || query.length < 3) {
       setSuggestions([]);
       return;
     }
 
+    if (!MAPBOX_TOKEN) {
+      console.error('Mapbox token is not configured. Please add VITE_MAPBOX_ACCESS_TOKEN to your .env file');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // Nominatim API - completely FREE, no API key needed!
+      // Mapbox Geocoding API - Broad search for all address types worldwide
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?` +
-        `q=${encodeURIComponent(query)}&` +
-        `format=json&` +
-        `addressdetails=1&` +
-        `countrycodes=us&` + // Limit to US addresses
-        `limit=5`,
-        {
-          headers: {
-            'Accept': 'application/json',
-            // Add a user agent to follow Nominatim usage policy
-            'User-Agent': 'BarterExchange/1.0'
-          }
-        }
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?` +
+        `access_token=${MAPBOX_TOKEN}&` +
+        `limit=10&` + // Show more results
+        `autocomplete=true&` +
+        `fuzzyMatch=true` // Enable fuzzy matching for better results
       );
 
       if (!response.ok) {
         throw new Error('Failed to fetch addresses');
       }
 
-      const data: NominatimResult[] = await response.json();
-      setSuggestions(data);
+      const data: MapboxGeocodingResponse = await response.json();
+      setSuggestions(data.features);
       setShowSuggestions(true);
     } catch (error) {
       console.error('Address search error:', error);
@@ -140,66 +234,67 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
     }, 500); // Wait 500ms after user stops typing
   };
 
+  // Parse address components from Mapbox feature
+  const parseAddressComponents = (feature: MapboxFeature) => {
+    let street = '';
+    let city = '';
+    let state = '';
+    let zipCode = '';
+    let country = 'USA';
+
+    // Extract street address
+    if (feature.address && feature.text) {
+      street = `${feature.address} ${feature.text}`;
+    } else if (feature.text) {
+      street = feature.text;
+    }
+
+    // Parse context for city, state, zipcode
+    if (feature.context) {
+      feature.context.forEach((item) => {
+        if (item.id.startsWith('place')) {
+          city = item.text;
+        } else if (item.id.startsWith('region')) {
+          state = item.short_code?.replace('US-', '') || item.text;
+        } else if (item.id.startsWith('postcode')) {
+          zipCode = item.text;
+        } else if (item.id.startsWith('country')) {
+          country = item.text;
+        }
+      });
+    }
+
+    return { street, city, state, zipCode, country };
+  };
+
   // Handle address selection
-  const handleSelectAddress = (result: NominatimResult) => {
-    const addr = result.address;
-
-    // Build street address
-    const street = [
-      addr.house_number,
-      addr.road
-    ].filter(Boolean).join(' ');
-
-    // Get city (could be city, town, or village)
-    const city = addr.city || addr.town || addr.village || '';
-
-    // Extract state abbreviation from full state name
-    const stateAbbr = getStateAbbreviation(addr.state || '');
+  const handleSelectAddress = (feature: MapboxFeature) => {
+    const { street, city, state, zipCode, country } = parseAddressComponents(feature);
 
     const addressDetails: AddressDetails = {
-      fullAddress: result.display_name,
+      fullAddress: feature.place_name,
       street: street,
       city: city,
-      state: stateAbbr,
-      zipCode: addr.postcode || '',
-      country: addr.country || 'USA',
-      lat: parseFloat(result.lat),
-      lng: parseFloat(result.lon)
+      state: state,
+      zipCode: zipCode,
+      country: country,
+      lat: feature.center[1], // Mapbox returns [lng, lat]
+      lng: feature.center[0]
     };
 
-    setSearchQuery(result.display_name);
+    setSearchQuery(feature.place_name);
     setSuggestions([]);
     setShowSuggestions(false);
 
     // Set location for map
-    setSelectedLocation({
-      lat: parseFloat(result.lat),
-      lng: parseFloat(result.lon),
-      address: result.display_name
-    });
-
-    onChange(addressDetails);
-  };
-
-  // Convert state name to abbreviation
-  const getStateAbbreviation = (stateName: string): string => {
-    const stateMap: Record<string, string> = {
-      'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
-      'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
-      'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
-      'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
-      'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
-      'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
-      'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
-      'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
-      'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
-      'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
-      'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
-      'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
-      'Wisconsin': 'WI', 'Wyoming': 'WY'
+    const location = {
+      lat: feature.center[1],
+      lng: feature.center[0],
+      address: feature.place_name
     };
 
-    return stateMap[stateName] || stateName;
+    setSelectedLocation(location);
+    onChange(addressDetails);
   };
 
   return (
@@ -231,32 +326,89 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
         {/* Suggestions Dropdown */}
         {showSuggestions && suggestions.length > 0 && (
           <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-            {suggestions.map((result) => (
-              <div
-                key={result.place_id}
-                onClick={() => handleSelectAddress(result)}
-                className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
-              >
-                <div className="flex items-start gap-2">
-                  <MapPin className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm">
-                    <div className="font-medium text-gray-900">
-                      {result.address.house_number} {result.address.road}
-                    </div>
-                    <div className="text-gray-600 text-xs mt-0.5">
-                      {result.address.city || result.address.town}, {result.address.state} {result.address.postcode}
+            {suggestions.map((feature) => {
+              const { street, city, state, zipCode } = parseAddressComponents(feature);
+
+              return (
+                <div
+                  key={feature.id}
+                  onClick={() => handleSelectAddress(feature)}
+                  className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                >
+                  <div className="flex items-start gap-2">
+                    <MapPin className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm">
+                      <div className="font-medium text-gray-900">
+                        {street || feature.text}
+                      </div>
+                      <div className="text-gray-600 text-xs mt-0.5">
+                        {city && `${city}, `}{state} {zipCode}
+                      </div>
                     </div>
                   </div>
                 </div>
+              );
+            })}
+
+            {/* Manual entry option */}
+            <div
+              onClick={() => {
+                // Allow manual entry with geocoding attempt
+                const manualFeature: MapboxFeature = {
+                  id: 'manual-' + Date.now(),
+                  place_name: searchQuery,
+                  center: [0, 0],
+                  text: searchQuery
+                };
+                handleSelectAddress(manualFeature);
+              }}
+              className="px-4 py-3 hover:bg-green-50 cursor-pointer border-t-2 border-green-200 bg-green-50"
+            >
+              <div className="flex items-start gap-2">
+                <MapPin className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <div className="font-medium text-green-900">
+                    Use: "{searchQuery}"
+                  </div>
+                  <div className="text-green-700 text-xs mt-0.5">
+                    Enter this address manually
+                  </div>
+                </div>
               </div>
-            ))}
+            </div>
           </div>
         )}
 
-        {/* No results message */}
+        {/* No results - offer manual entry */}
         {showSuggestions && !isLoading && suggestions.length === 0 && searchQuery.length >= 3 && (
-          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg p-4 text-sm text-gray-500 text-center">
-            No addresses found. Try a different search.
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg">
+            <div className="p-3 text-sm text-gray-500 text-center border-b border-gray-200">
+              No addresses found in Mapbox database
+            </div>
+            <div
+              onClick={() => {
+                const manualFeature: MapboxFeature = {
+                  id: 'manual-' + Date.now(),
+                  place_name: searchQuery,
+                  center: [0, 0],
+                  text: searchQuery
+                };
+                handleSelectAddress(manualFeature);
+              }}
+              className="px-4 py-3 hover:bg-green-50 cursor-pointer bg-green-50"
+            >
+              <div className="flex items-start gap-2">
+                <MapPin className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <div className="font-medium text-green-900">
+                    Use: "{searchQuery}"
+                  </div>
+                  <div className="text-green-700 text-xs mt-0.5">
+                    Enter this address manually (map will not be available)
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -268,18 +420,17 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
       <div className="flex items-center gap-1 text-xs text-muted-foreground">
         <span>✓ Powered by</span>
         <a
-          href="https://www.openstreetmap.org"
+          href="https://www.mapbox.com"
           target="_blank"
           rel="noopener noreferrer"
           className="text-blue-600 hover:underline"
         >
-          OpenStreetMap
+          Mapbox
         </a>
-        <span className="text-green-600 font-medium">(100% FREE)</span>
       </div>
 
       {/* Map Preview - Shows when location is selected */}
-      {selectedLocation && (
+      {selectedLocation && MAPBOX_TOKEN && (
         <div className="mt-4 rounded-lg overflow-hidden border border-gray-200 shadow-sm">
           <div className="bg-blue-50 px-3 py-2 border-b border-blue-200">
             <div className="flex items-center gap-2">
@@ -287,25 +438,12 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
               <span className="text-sm font-medium text-blue-900">Selected Location</span>
             </div>
           </div>
-          <MapContainer
-            center={[selectedLocation.lat, selectedLocation.lng]}
-            zoom={15}
-            style={{ height: '250px', width: '100%' }}
-            scrollWheelZoom={false}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            />
-            <Marker position={[selectedLocation.lat, selectedLocation.lng]}>
-              <Popup>
-                <div className="text-sm">
-                  <div className="font-medium">Your Business Location</div>
-                  <div className="text-gray-600 text-xs mt-1">{selectedLocation.address}</div>
-                </div>
-              </Popup>
-            </Marker>
-          </MapContainer>
+
+          <div
+            ref={mapContainerRef}
+            style={{ width: '100%', height: '250px' }}
+          />
+
           <div className="bg-gray-50 px-3 py-2 text-xs text-gray-600">
             <div className="flex items-center justify-between">
               <span>Coordinates: {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}</span>
@@ -317,6 +455,14 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {!MAPBOX_TOKEN && selectedLocation && (
+        <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-sm text-yellow-800">
+            <strong>Mapbox token not configured.</strong> Please add <code className="bg-yellow-100 px-1 rounded">VITE_MAPBOX_ACCESS_TOKEN</code> to your .env file.
+          </p>
         </div>
       )}
     </div>

@@ -30,7 +30,7 @@ const getOAuthConfig = (provider: string): OAuthConfig | null => {
         authUrl: squareAuthUrl,
         clientId: squareClientId,
         redirectUri: baseRedirectUri,
-        scopes: ['MERCHANT_PROFILE_READ', 'PAYMENTS_WRITE', 'PAYMENTS_READ', 'ORDERS_READ']
+        scopes: ['MERCHANT_PROFILE_READ', 'PAYMENTS_WRITE', 'PAYMENTS_READ', 'ORDERS_READ', 'ITEMS_READ']
       };
     
     case 'shopify':
@@ -38,7 +38,7 @@ const getOAuthConfig = (provider: string): OAuthConfig | null => {
         authUrl: 'https://SHOP_NAME.myshopify.com/admin/oauth/authorize',
         clientId: Deno.env.get('SHOPIFY_CLIENT_ID') || '',
         redirectUri: baseRedirectUri,
-        scopes: ['read_orders', 'read_products']
+        scopes: ['read_orders', 'write_orders', 'read_products', 'write_products']
       };
     
     case 'clover':
@@ -46,7 +46,7 @@ const getOAuthConfig = (provider: string): OAuthConfig | null => {
         authUrl: 'https://sandbox.dev.clover.com/oauth/authorize',
         clientId: Deno.env.get('CLOVER_OAUTH_CLIENT_ID') || '',
         redirectUri: baseRedirectUri,
-        scopes: ['payments', 'orders', 'merchants']
+        scopes: [] // Clover uses Developer Portal permissions, not URL scopes
       };
 
     case 'lightspeed':
@@ -54,7 +54,7 @@ const getOAuthConfig = (provider: string): OAuthConfig | null => {
         authUrl: 'https://secure.retail.lightspeed.app/connect',
         clientId: Deno.env.get('LIGHTSPEED_OAUTH_CLIENT_ID') || '',
         redirectUri: baseRedirectUri,
-        scopes: ['employee:all', 'employee:register_sale', 'employee:reports']
+        scopes: ['products:read', 'inventory:read']  // X-Series scopes
       };
 
     default:

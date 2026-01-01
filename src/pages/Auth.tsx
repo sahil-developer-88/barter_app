@@ -76,7 +76,7 @@ const Auth = () => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        navigate('/dashboard');
+        navigate('/');
       }
     };
     checkAuth();
@@ -103,6 +103,34 @@ const Auth = () => {
       
       if (!emailDomain || (!commonDomains.includes(emailDomain) && !emailDomain.includes('.'))) {
         setError('Please use a valid email domain (e.g., gmail.com, your-company.com)');
+        setLoading(false);
+        return;
+      }
+
+      // Check if email already exists in auth system or profiles
+      console.log('Checking if email already exists:', email);
+
+      try {
+        const { data: emailCheck, error: checkError } = await supabase.functions.invoke('check-email-exists', {
+          body: { email: email.toLowerCase() }
+        });
+
+        if (checkError) {
+          console.error('Error checking email:', checkError);
+          setError('Unable to verify email availability. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        if (emailCheck?.exists) {
+          console.log('Email already exists:', emailCheck);
+          setError('An account with this email already exists. Please sign in instead or use a different email.');
+          setLoading(false);
+          return;
+        }
+      } catch (checkError) {
+        console.error('Error checking email existence:', checkError);
+        setError('Unable to verify email. Please try again.');
         setLoading(false);
         return;
       }
@@ -284,12 +312,12 @@ const Auth = () => {
 
         toast({
           title: "Welcome back!",
-          description: "Redirecting to your dashboard...",
+          description: "Redirecting to store listings...",
         });
 
         // Use React Router navigate
         if (profile.onboarding_completed) {
-          navigate('/dashboard');
+          navigate('/');
         } else {
           navigate('/onboarding');
         }
@@ -318,7 +346,7 @@ const Auth = () => {
       }
 
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth?type=recovery`,
+        redirectTo: `${window.location.origin}/reset-password`,
       });
 
       if (resetError) {

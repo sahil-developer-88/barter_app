@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { MessageSquare, Settings } from 'lucide-react';
-import Header from '@/components/Header';
 import HeroSection from '@/components/HeroSection';
 import SearchSection from '@/components/SearchSection';
 import BusinessListings from '@/components/BusinessListings';
@@ -26,10 +25,13 @@ const Index = () => {
   
   const [showInstallPromptState, setShowInstallPromptState] = useState(true);
   const { isInstallable, isInstalled } = usePWA();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { hasRole: isAdmin } = useHasRole('admin');
   // const { isAdmin } = useAdminAccess();
   const navigate = useNavigate();
+
+  // Allow logged-in users to browse store listings
+  // (Removed redirect to dashboard - users can access via Profile button)
 
   // Fetch real businesses from database
   useEffect(() => {
@@ -117,8 +119,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
-      
       <div className="mobile-container">
         <HeroSection />
       </div>

@@ -34,6 +34,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // Clean up onboarding data when user signs out
+        if (event === 'SIGNED_OUT' && user?.id) {
+          const backupKey = `barterex_onboarding_backup_${user.id}`;
+          localStorage.removeItem(backupKey);
+        }
+
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -52,6 +58,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
+      // Clear user-specific onboarding backup before signing out
+      if (user?.id) {
+        const backupKey = `barterex_onboarding_backup_${user.id}`;
+        localStorage.removeItem(backupKey);
+      }
+
       await supabase.auth.signOut();
       setUser(null);
       setSession(null);

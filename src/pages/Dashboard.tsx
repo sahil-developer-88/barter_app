@@ -19,7 +19,13 @@ import {
   Gift,
   QrCode,
   Package,
-  CreditCard
+  CreditCard,
+  ShoppingCart,
+  LayoutDashboard,
+  Scan,
+  ClipboardList,
+  Settings,
+  Briefcase
 } from "lucide-react";
 import { Link, useNavigate } from 'react-router-dom';
 import TaxReporting from '@/components/tax/TaxReporting';
@@ -198,7 +204,7 @@ const Dashboard = () => {
         {/* POS Setup Reminder */}
         {showPOSReminder && (
           <POSSetupReminder
-            onConnect={() => navigate('/merchant-dashboard')}
+            onConnect={() => navigate('/merchant/dashboard')}
             onDismiss={handleDismissReminder}
           />
         )}
@@ -210,7 +216,7 @@ const Dashboard = () => {
             <TabsTrigger value="inbox">Inbox ({tradeRequests.length})</TabsTrigger>
             <TabsTrigger value="matches">Matches</TabsTrigger>
             <TabsTrigger value="merchant">
-              <CreditCard className="h-4 w-4 mr-1" />
+              <Briefcase className="h-4 w-4 mr-1" />
               Merchant
             </TabsTrigger>
             <TabsTrigger value="favorites">Favorites</TabsTrigger>
@@ -287,6 +293,14 @@ const Dashboard = () => {
 
             {/* Quick Actions for New Features */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/checkout')}>
+                <CardContent className="flex items-center justify-center p-6">
+                  <div className="text-center">
+                    <ShoppingCart className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                    <p className="text-sm font-medium">Checkout</p>
+                  </div>
+                </CardContent>
+              </Card>
               <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveTab('merchant')}>
                 <CardContent className="flex items-center justify-center p-6">
                   <div className="text-center">
@@ -435,24 +449,61 @@ const Dashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="merchant">
+          <TabsContent value="merchant" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Merchant POS Integration</CardTitle>
-                <CardDescription>Connect your Point of Sale system for seamless transaction syncing</CardDescription>
+                <CardTitle>Merchant Tools</CardTitle>
+                <CardDescription>Manage your merchant operations, products, and POS integrations</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8">
-                  <CreditCard className="h-16 w-16 mx-auto mb-4 text-blue-600" />
-                  <h3 className="text-lg font-semibold mb-2">Access Full Merchant Dashboard</h3>
-                  <p className="text-gray-600 mb-6">
-                    Connect your POS system, view real-time transactions, and manage payment splits.
-                  </p>
-                  <Button asChild size="lg">
-                    <Link to="/merchant-dashboard">
-                      Go to Merchant Dashboard
-                    </Link>
-                  </Button>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/merchant/dashboard')}>
+                    <CardContent className="flex flex-col items-center justify-center p-6">
+                      <LayoutDashboard className="h-10 w-10 mb-3 text-blue-600" />
+                      <h3 className="font-semibold text-center mb-1">Merchant Dashboard</h3>
+                      <p className="text-xs text-gray-600 text-center">View analytics and transactions</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/merchant/products')}>
+                    <CardContent className="flex flex-col items-center justify-center p-6">
+                      <Package className="h-10 w-10 mb-3 text-green-600" />
+                      <h3 className="font-semibold text-center mb-1">My Products</h3>
+                      <p className="text-xs text-gray-600 text-center">Manage product catalog</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/checkout')}>
+                    <CardContent className="flex flex-col items-center justify-center p-6">
+                      <Scan className="h-10 w-10 mb-3 text-purple-600" />
+                      <h3 className="font-semibold text-center mb-1">Checkout (POS)</h3>
+                      <p className="text-xs text-gray-600 text-center">Process customer transactions</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/merchant/orders')}>
+                    <CardContent className="flex flex-col items-center justify-center p-6">
+                      <ClipboardList className="h-10 w-10 mb-3 text-orange-600" />
+                      <h3 className="font-semibold text-center mb-1">My Orders</h3>
+                      <p className="text-xs text-gray-600 text-center">Track customer orders</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/merchant/dashboard')}>
+                    <CardContent className="flex flex-col items-center justify-center p-6">
+                      <CreditCard className="h-10 w-10 mb-3 text-red-600" />
+                      <h3 className="font-semibold text-center mb-1">POS Integration</h3>
+                      <p className="text-xs text-gray-600 text-center">Connect POS systems</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/merchant/settings')}>
+                    <CardContent className="flex flex-col items-center justify-center p-6">
+                      <Settings className="h-10 w-10 mb-3 text-gray-600" />
+                      <h3 className="font-semibold text-center mb-1">Settings</h3>
+                      <p className="text-xs text-gray-600 text-center">Configure merchant preferences</p>
+                    </CardContent>
+                  </Card>
                 </div>
               </CardContent>
             </Card>

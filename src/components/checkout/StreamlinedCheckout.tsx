@@ -7,8 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { ArrowRight, ShoppingCart, CreditCard, DollarSign, CheckCircle, AlertCircle, Scan } from 'lucide-react';
-import { shiftPOSTransaction, calculateBarterPayment, type POSTransaction } from '@/utils/posIntegration';
+import { ArrowRight, ShoppingCart, CreditCard, DollarSign, CheckCircle, AlertCircle, Scan, AlertTriangle } from 'lucide-react';
+import { shiftPOSTransaction, type POSTransaction } from '@/utils/posIntegration';
+import { useCheckoutEligibility } from '@/hooks/useCheckoutEligibility';
 
 interface Customer {
   id: string;
@@ -103,9 +104,18 @@ const StreamlinedCheckout = () => {
     setError('');
   };
 
-  const paymentCalculation = customer && posTransaction 
-    ? calculateBarterPayment(posTransaction, barterPercentage, customer.barterBalance)
-    : null;
+  // Use new checkout eligibility hook with product-level checking
+  const {
+    checkoutSplit,
+    payment,
+    validation,
+    isLoading: isCheckingProducts
+  } = useCheckoutEligibility(
+    posTransaction,
+    barterPercentage,
+    customer?.barterBalance || 0,
+    posTransaction?.taxRate || 8.25
+  );
 
   return (
     <div className="max-w-2xl mx-auto p-6">
@@ -171,31 +181,118 @@ const StreamlinedCheckout = () => {
             </div>
           )}
 
-          {currentStep === 'review' && customer && posTransaction && paymentCalculation && (
+          {currentStep === 'review' && customer && posTransaction && payment && (
             <div className="space-y-6">
+              {/* Customer Info */}
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-blue-800">Customer Information</h3>
                 <p className="text-blue-700">{customer.name}</p>
                 <p className="text-sm text-blue-600">Available Balance: ${customer.barterBalance.toFixed(2)}</p>
               </div>
 
-              <div>
-                <h3 className="font-semibold mb-3">Transaction Items</h3>
-                <div className="space-y-2">
-                  {posTransaction.items.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                      <div>
-                        <span className="font-medium">{item.name}</span>
-                        <span className="text-sm text-gray-600 ml-2">×{item.quantity}</span>
-                      </div>
-                      <span className="font-medium">${(item.price * item.quantity).toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* Validation Warnings */}
+              {validation?.warnings && validation.warnings.length > 0 && (
+                <Alert className="border-orange-200 bg-orange-50">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="text-orange-800">
+                    {validation.warnings.map((warning, index) => (
+                      <div key={index}>{warning}</div>
+                    ))}
+                  </AlertDescription>
+                </Alert>
+              )}
 
+              {/* Validation Errors */}
+              {validation?.errors && validation.errors.length > 0 && (
+                <Alert className="border-red-200 bg-red-50">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-700">
+                    {validation.errors.map((err, index) => (
+                      <div key={index}>{err}</div>
+                    ))}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Barter-Eligible Items */}
+              {payment.eligibleItems.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      Barter-Eligible Items
+                    </h3>
+                    <Badge variant="default" className="bg-green-600">
+                      ${payment.eligibleSubtotal.toFixed(2)}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {payment.eligibleItems.map((item, index) => (
+                      <div key={index} className="flex justify-between items-center p-2 bg-green-50 rounded border border-green-200">
+                        <div>
+                          <span className="font-medium">{item.name}</span>
+                          <span className="text-sm text-gray-600 ml-2">×{item.quantity}</span>
+                          {item.categoryName && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              {item.categoryName}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="font-medium">${item.totalPrice.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Restricted Items */}
+              {payment.restrictedItems.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600" />
+                      Restricted Items (Cash Only)
+                    </h3>
+                    <Badge variant="destructive">
+                      ${payment.restrictedSubtotal.toFixed(2)}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {payment.restrictedItems.map((item, index) => (
+                      <div key={index} className="flex justify-between items-start p-2 bg-red-50 rounded border border-red-200">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{item.name}</span>
+                            <span className="text-sm text-gray-600">×{item.quantity}</span>
+                          </div>
+                          {item.restrictionReason && (
+                            <p className="text-xs text-red-700 mt-1">
+                              ⚠️ {item.restrictionReason}
+                            </p>
+                          )}
+                          {item.categoryName && (
+                            <Badge variant="outline" className="mt-1 text-xs border-red-300 text-red-700">
+                              {item.categoryName}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="font-medium">${item.totalPrice.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Barter Percentage Slider */}
               <div>
-                <Label>Barter Percentage: {barterPercentage}%</Label>
+                <Label>
+                  Barter Percentage: {barterPercentage}%
+                  {payment.eligibleSubtotal > 0 && (
+                    <span className="text-sm text-gray-600 ml-2">
+                      (Applied to ${payment.eligibleSubtotal.toFixed(2)} eligible items)
+                    </span>
+                  )}
+                </Label>
                 <input
                   type="range"
                   min="0"
@@ -204,42 +301,101 @@ const StreamlinedCheckout = () => {
                   value={barterPercentage}
                   onChange={(e) => setBarterPercentage(parseInt(e.target.value))}
                   className="w-full mt-2"
+                  disabled={payment.eligibleSubtotal === 0}
                 />
+                {payment.eligibleSubtotal === 0 && (
+                  <p className="text-xs text-red-600 mt-1">
+                    All items are restricted - barter cannot be applied
+                  </p>
+                )}
               </div>
 
+              {/* Enhanced Payment Breakdown */}
               <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                <div className="text-sm font-semibold text-gray-700 mb-2">Payment Breakdown</div>
+
+                {/* Eligible Items Subtotal */}
+                {payment.eligibleSubtotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-green-700">Eligible Items:</span>
+                    <span className="text-green-700">${payment.eligibleSubtotal.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* Restricted Items Subtotal */}
+                {payment.restrictedSubtotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-red-700">Restricted Items (Cash Only):</span>
+                    <span className="text-red-700">${payment.restrictedSubtotal.toFixed(2)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between border-t pt-2">
+                  <span>Total Subtotal:</span>
+                  <span>${payment.totalSubtotal.toFixed(2)}</span>
+                </div>
+
+                {/* Barter Credits Applied */}
+                {payment.barterAmount > 0 && (
+                  <div className="flex justify-between text-green-600 font-medium">
+                    <span>Barter Credits Applied:</span>
+                    <span>-${payment.barterAmount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* Cash Breakdown */}
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Cash for Eligible Items:</span>
+                  <span className="text-gray-600">${payment.cashForEligibleItems.toFixed(2)}</span>
+                </div>
+                {payment.restrictedSubtotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Cash for Restricted Items:</span>
+                    <span className="text-gray-600">${payment.cashForRestrictedItems.toFixed(2)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between border-t pt-2">
+                  <span>Total Cash Subtotal:</span>
+                  <span>${payment.totalCashSubtotal.toFixed(2)}</span>
+                </div>
+
+                {/* Tax (only on cash portion) */}
                 <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>${paymentCalculation.originalSubtotal.toFixed(2)}</span>
+                  <span>Tax ({payment.taxRate}% on cash only):</span>
+                  <span>${payment.taxOnCash.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-green-600">
-                  <span>Barter Credits:</span>
-                  <span>-${paymentCalculation.barterAmount.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Cash Amount:</span>
-                  <span>${paymentCalculation.cashAmount.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tax on Cash:</span>
-                  <span>${paymentCalculation.taxOnCashAmount.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-lg border-t pt-2">
+
+                {/* Final Total */}
+                <div className="flex justify-between font-bold text-lg border-t-2 pt-2 mt-2">
                   <span>Total Due:</span>
-                  <span>${paymentCalculation.finalTotal.toFixed(2)}</span>
+                  <span>${payment.finalTotal.toFixed(2)}</span>
                 </div>
+
+                {/* Credits Remaining */}
+                {payment.barterAmount > 0 && (
+                  <div className="flex justify-between text-sm text-blue-600 mt-2 pt-2 border-t">
+                    <span>Remaining Barter Balance:</span>
+                    <span>${payment.barterCreditsRemaining.toFixed(2)}</span>
+                  </div>
+                )}
               </div>
 
+              {/* Action Buttons */}
               <div className="flex gap-3">
                 <Button variant="outline" onClick={resetFlow} className="flex-1">
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   onClick={handleShiftTransaction}
                   className="flex-1 bg-green-600 hover:bg-green-700"
-                  disabled={paymentCalculation.barterAmount > customer.barterBalance}
+                  disabled={
+                    !validation?.isValid ||
+                    payment.barterAmount > customer.barterBalance ||
+                    isCheckingProducts
+                  }
                 >
-                  Process Payment
+                  {isCheckingProducts ? 'Checking Products...' : 'Process Payment'}
                 </Button>
               </div>
             </div>

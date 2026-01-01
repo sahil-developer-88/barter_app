@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,6 +29,21 @@ const US_STATES = [
 
 const ContactReviewStep: React.FC<ContactReviewStepProps> = ({ formData, setFormData }) => {
   const [showOnlinePresence, setShowOnlinePresence] = useState(false);
+
+  // Initialize contactMethod field on mount if not set
+  useEffect(() => {
+    if (!formData.contactMethod) {
+      const methods = [];
+      if (formData.contactMethods?.phone) methods.push('Phone');
+      if (formData.contactMethods?.email) methods.push('Email');
+      methods.push('Messenger'); // Always available
+
+      setFormData(prev => ({
+        ...prev,
+        contactMethod: methods.join(', ')
+      }));
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -130,22 +146,141 @@ const ContactReviewStep: React.FC<ContactReviewStepProps> = ({ formData, setForm
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label htmlFor="contactMethod" className="text-base font-medium flex items-center gap-2">
+        <div className="space-y-3">
+          <Label className="text-base font-medium flex items-center gap-2">
             <Mail className="h-4 w-4" />
-            Preferred Contact Method *
+            Contact Methods *
           </Label>
-          <Input
-            id="contactMethod"
-            value={formData.contactMethod}
-            onChange={(e) => setFormData(prev => ({ ...prev, contactMethod: e.target.value }))}
-            placeholder="Email or phone number"
-            className="text-base"
-            maxLength={200}
-          />
-          <p className="text-xs text-muted-foreground">
-            How should people contact you? (e.g., email@example.com or (555) 123-4567)
+          <p className="text-xs text-muted-foreground mb-3">
+            Choose how customers can reach you. Messenger is always available for all businesses.
           </p>
+
+          <div className="space-y-3 bg-gray-50 p-4 rounded-lg border">
+            {/* Phone Option */}
+            <div className="space-y-2">
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id="contactPhone"
+                  checked={formData.contactMethods?.phone || false}
+                  onCheckedChange={(checked) => {
+                    setFormData(prev => {
+                      const newContactMethods = {
+                        ...prev.contactMethods,
+                        phone: !!checked
+                      };
+                      // Build contactMethod string for backward compatibility
+                      const methods = [];
+                      if (newContactMethods.phone) methods.push('Phone');
+                      if (newContactMethods.email) methods.push('Email');
+                      methods.push('Messenger'); // Always available
+
+                      return {
+                        ...prev,
+                        contactMethods: newContactMethods,
+                        contactMethod: methods.join(', ')
+                      };
+                    });
+                  }}
+                />
+                <div className="flex-1">
+                  <Label htmlFor="contactPhone" className="font-medium cursor-pointer">
+                    Phone
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Customers can call or text you
+                  </p>
+                </div>
+              </div>
+              {/* Phone Number Input - Show when checked */}
+              {formData.contactMethods?.phone && (
+                <div className="ml-7 mt-2">
+                  <Input
+                    type="tel"
+                    placeholder="(555) 123-4567"
+                    value={formData.phoneNumber || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                    className="text-base"
+                    required
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Email Option */}
+            <div className="space-y-2">
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id="contactEmail"
+                  checked={formData.contactMethods?.email || false}
+                  onCheckedChange={(checked) => {
+                    setFormData(prev => {
+                      const newContactMethods = {
+                        ...prev.contactMethods,
+                        email: !!checked
+                      };
+                      // Build contactMethod string for backward compatibility
+                      const methods = [];
+                      if (newContactMethods.phone) methods.push('Phone');
+                      if (newContactMethods.email) methods.push('Email');
+                      methods.push('Messenger'); // Always available
+
+                      return {
+                        ...prev,
+                        contactMethods: newContactMethods,
+                        contactMethod: methods.join(', ')
+                      };
+                    });
+                  }}
+                />
+                <div className="flex-1">
+                  <Label htmlFor="contactEmail" className="font-medium cursor-pointer">
+                    Email
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Customers can email you directly
+                  </p>
+                </div>
+              </div>
+              {/* Email Input - Show when checked */}
+              {formData.contactMethods?.email && (
+                <div className="ml-7 mt-2">
+                  <Input
+                    type="email"
+                    placeholder="your@email.com"
+                    value={formData.emailAddress || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, emailAddress: e.target.value }))}
+                    className="text-base"
+                    required
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Messenger Option - Always Enabled */}
+            <div className="flex items-start space-x-3 bg-blue-50 p-3 rounded border border-blue-200">
+              <Checkbox
+                id="contactMessenger"
+                checked={true}
+                disabled={true}
+                className="cursor-not-allowed"
+              />
+              <div className="flex-1">
+                <Label htmlFor="contactMessenger" className="font-medium flex items-center gap-2">
+                  Messenger
+                  <Badge variant="secondary" className="text-xs">Always Available</Badge>
+                </Label>
+                <p className="text-xs text-blue-700 mt-1">
+                  Built-in private messaging like Instagram DMs. All businesses have this automatically.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {!formData.contactMethods?.phone && !formData.contactMethods?.email && (
+            <p className="text-xs text-orange-600 mt-2">
+              ⚠️ Please select at least Phone or Email (Messenger is included by default)
+            </p>
+          )}
         </div>
       </div>
 
@@ -315,8 +450,27 @@ const ContactReviewStep: React.FC<ContactReviewStepProps> = ({ formData, setForm
             </div>
 
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Contact Method</p>
-              <p className="text-base">{formData.contactMethod || '—'}</p>
+              <p className="text-sm font-medium text-muted-foreground mb-2">Contact Methods</p>
+              <div className="space-y-2">
+                {formData.contactMethods?.phone && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default">Phone</Badge>
+                    <span className="text-sm">{formData.phoneNumber || '—'}</span>
+                  </div>
+                )}
+                {formData.contactMethods?.email && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default">Email</Badge>
+                    <span className="text-sm">{formData.emailAddress || '—'}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200">
+                    Messenger
+                  </Badge>
+                  <span className="text-xs text-blue-600">Built-in messaging (auto-enabled)</span>
+                </div>
+              </div>
             </div>
 
             {formData.website && (

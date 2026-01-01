@@ -17,7 +17,14 @@ export interface OnboardingFormData {
   stateOfIncorporation?: string; // New: For online-only businesses
   latitude?: number; // New: GPS coordinates
   longitude?: number; // New: GPS coordinates
-  contactMethod: string;
+  contactMethod: string; // Kept for backward compatibility
+  contactMethods?: {
+    phone: boolean;
+    email: boolean;
+    messenger: boolean; // Always true
+  };
+  phoneNumber?: string; // Phone number if phone contact enabled
+  emailAddress?: string; // Email address if email contact enabled
   description: string;
   website: string;
   socialMedia: {
@@ -43,6 +50,11 @@ export const useOnboardingForm = () => {
     location: '',
     isOnlineOnly: false,
     contactMethod: '',
+    contactMethods: {
+      phone: false,
+      email: false,
+      messenger: true // Always enabled
+    },
     description: '',
     website: '',
     socialMedia: {
@@ -52,7 +64,7 @@ export const useOnboardingForm = () => {
       linkedin: ''
     },
     pricedItems: [],
-    barterPercentage: 20,
+    barterPercentage: 100,
     businessVerificationStatus: 'pending'
   });
 

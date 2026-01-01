@@ -1,22 +1,10 @@
+const CACHE_NAME = 'swap-shop-finder-v2';
 
-const CACHE_NAME = 'swap-shop-finder-v1';
-const urlsToCache = [
-  '/',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
-  '/manifest.json',
-  '/placeholder.svg'
-];
-
-// Install event
+// Install event - skip waiting to activate immediately
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-  );
+  console.log('Service worker installing...');
+  // Skip waiting to activate immediately
+  self.skipWaiting();
 });
 
 // Fetch event

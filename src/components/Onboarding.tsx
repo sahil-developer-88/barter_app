@@ -51,7 +51,7 @@ const steps = [
   "POS"
 ];
 
-const ONBOARDING_BACKUP_KEY = 'barterex_onboarding_backup';
+const getOnboardingBackupKey = (userId: string) => `barterex_onboarding_backup_${userId}`;
 
 const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const [step, setStep] = useState(1);
@@ -106,19 +106,34 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
         setProfileChecked(true);
 
-        // Try to restore from backup
-        const backup = localStorage.getItem(ONBOARDING_BACKUP_KEY);
+        // Try to restore from backup for THIS user only
+        const backupKey = getOnboardingBackupKey(user.id);
+        const backup = localStorage.getItem(backupKey);
         if (backup) {
           try {
             const backupData = JSON.parse(backup);
-            setFormData(prev => ({ ...prev, ...backupData }));
-            toast({
-              title: "Progress restored",
-              description: "We've restored your previous onboarding data.",
-            });
+            // Validate that backup belongs to current user
+            if (backupData.userId === user.id) {
+              setFormData(prev => ({ ...prev, ...backupData }));
+              toast({
+                title: "Progress restored",
+                description: "We've restored your previous onboarding data.",
+              });
+            } else {
+              // Clear invalid backup
+              console.warn('Backup belongs to different user, clearing...');
+              localStorage.removeItem(backupKey);
+            }
           } catch (e) {
             console.error('Failed to restore backup:', e);
+            localStorage.removeItem(backupKey);
           }
+        }
+
+        // Clean up old global backup key if it exists
+        const oldBackupKey = 'barterex_onboarding_backup';
+        if (localStorage.getItem(oldBackupKey)) {
+          localStorage.removeItem(oldBackupKey);
         }
       } catch (error) {
         console.error('Error checking profile:', error);
@@ -129,11 +144,13 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     checkAuthAndProfile();
   }, [user, authLoading, navigate, setFormData]);
 
-  // Auto-save form data to localStorage
+  // Auto-save form data to localStorage with user ID
   useEffect(() => {
     if (profileChecked && user) {
       try {
-        localStorage.setItem(ONBOARDING_BACKUP_KEY, JSON.stringify(formData));
+        const backupKey = getOnboardingBackupKey(user.id);
+        const backupData = { ...formData, userId: user.id };
+        localStorage.setItem(backupKey, JSON.stringify(backupData));
       } catch (e) {
         console.error('Failed to backup form data:', e);
       }
@@ -256,15 +273,15 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     }
   };
 
-  const completeOnboarding = async () => {
+  const completeOnboarding = async (skipNavigation = false) => {
     if (!user) {
       setError('User not authenticated');
       return;
     }
-    
+
     setLoading(true);
     setError('');
-    
+
     try {
       console.log('Starting onboarding completion for user:', user.id);
 
@@ -341,19 +358,22 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       }
 
       console.log('Onboarding completed successfully');
-      
-      // Clear backup
-      localStorage.removeItem(ONBOARDING_BACKUP_KEY);
 
-      toast({
-        title: "Welcome to BarterEx!",
-        description: "Your business profile is now active.",
-      });
-      
-      if (onComplete) {
-        onComplete();
-      } else {
-        navigate('/dashboard');
+      // Clear backup for this user
+      const backupKey = getOnboardingBackupKey(user.id);
+      localStorage.removeItem(backupKey);
+
+      if (!skipNavigation) {
+        toast({
+          title: "Welcome to BarterEx!",
+          description: "Your business profile is now active.",
+        });
+
+        if (onComplete) {
+          onComplete();
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (error: any) {
       console.error('Error completing onboarding:', error);
@@ -444,6 +464,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           <POSSetupStep
             onComplete={handlePOSSetupComplete}
             onBack={prevStep}
+            onSaveBeforePOS={async () => {
+              // Save onboarding data before OAuth redirect
+              await completeOnboarding(true);
+            }}
           />
         );
       default:

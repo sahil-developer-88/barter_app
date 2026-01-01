@@ -1,50 +1,172 @@
-import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Star, Mail, CheckCircle, Coins, User, Globe, ExternalLink, MessageSquare, ShoppingCart } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, MapPin, Star, Mail, CheckCircle, Coins, User, Globe, ExternalLink, MessageSquare, ShoppingCart, Package, Search } from "lucide-react";
 import InquiryModal from "@/components/merchant/InquiryModal";
-
-// Mock data - in real app this would come from Supabase
-const mockBusiness = {
-  id: 1,
-  businessName: "Digital Marketing Solutions",
-  category: "Marketing",
-  servicesOffered: ["Social Media Management", "SEO", "Content Creation", "PPC Advertising", "Email Marketing"],
-  wantingInReturn: ["Legal Services", "Accounting", "Web Development"],
-  estimatedValue: 500,
-  location: "San Francisco, CA",
-  contactMethod: "contact@digitalmarketing.com",
-  rating: 4.8,
-  reviews: 23,
-  verified: true,
-  points: 150,
-  image: "photo-1460925895917-afdab827c52f",
-  description: "Professional digital marketing services to help grow your online presence and reach your target audience effectively.",
-  fullDescription: "We are a full-service digital marketing agency with over 5 years of experience helping businesses of all sizes achieve their online marketing goals. Our team of certified professionals specializes in creating comprehensive marketing strategies that drive real results.",
-  owner: "Sarah Johnson",
-  memberSince: "January 2023",
-  completedTrades: 12,
-  responseTime: "Within 2 hours",
-  website: "https://digitalmarketing.com",
-  socialMedia: {
-    instagram: "@digitalmarketing",
-    twitter: "@digmarketing",
-    facebook: "digitalmarketingsolutions",
-    linkedin: "company/digital-marketing-solutions"
-  },
-  pricedItems: [
-    { name: "Logo Design Package", price: 200, points: 20 },
-    { name: "SEO Audit", price: 150, points: 15 },
-    { name: "Social Media Setup", price: 100, points: 10 },
-    { name: "Content Strategy", price: 250, points: 25 }
-  ]
-};
+import ProductCard from "@/components/products/ProductCard";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
+import { useCart } from "@/contexts/CartContext";
 
 const ListingDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { addToCart, merchantInfo, switchMerchant } = useCart();
   const [isInquiryModalOpen, setIsInquiryModalOpen] = useState(false);
+  const [business, setBusiness] = useState<any>(null);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productSearch, setProductSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+
+  // Fetch business details
+  useEffect(() => {
+    const fetchBusiness = async () => {
+      if (!id) return;
+
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('businesses')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (error) throw error;
+        setBusiness(data);
+      } catch (error: any) {
+        console.error('Error fetching business:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load business details",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBusiness();
+  }, [id, toast]);
+
+  // Fetch products for this business
+  useEffect(() => {
+    const fetchProducts = async () => {
+      if (!id) return;
+
+      try {
+        setProductsLoading(true);
+        const { data, error } = await supabase
+          .from('products_with_eligibility')
+          .select('*')
+          .eq('business_id', id)
+          .eq('is_active', true)
+          .gt('stock_quantity', 0)
+          .order('name');
+
+        if (error) throw error;
+        setProducts(data || []);
+      } catch (error: any) {
+        console.error('Error fetching products:', error);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+
+    fetchProducts();
+
+    // Set up real-time subscription for products
+    const subscription = supabase
+      .channel(`products_business_${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products',
+          filter: `business_id=eq.${id}`
+        },
+        (payload) => {
+          console.log('Product change detected:', payload);
+          // Refetch products when any change occurs
+          fetchProducts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [id]);
+
+  // Filter products based on search and category
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                         product.sku?.toLowerCase().includes(productSearch.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || product.category_name === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
+  // Get unique categories from products
+  const categories = Array.from(new Set(products.map(p => p.category_name).filter(Boolean)));
+
+  // Handle add to cart
+  const handleAddToCart = (product: any) => {
+    if (!business) return;
+
+    // Check if adding from a different merchant
+    if (merchantInfo && merchantInfo.id !== business.id) {
+      // Show confirmation dialog
+      if (window.confirm(
+        `Your cart contains items from ${merchantInfo.business_name}. Adding items from ${business.business_name} will clear your current cart. Continue?`
+      )) {
+        switchMerchant(business.id);
+      } else {
+        return;
+      }
+    }
+
+    // Prepare merchant info
+    const currentMerchantInfo = {
+      id: business.id,
+      business_name: business.business_name,
+      location: business.location,
+      barter_percentage: business.barter_percentage
+    };
+
+    // Prepare cart item
+    const cartItem = {
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      merchant_id: business.user_id,
+      merchant_name: business.business_name,
+      image_url: product.image_url,
+      stock_quantity: product.stock_quantity,
+      barcode: product.barcode,
+      sku: product.sku,
+      category_name: product.category_name,
+      is_barter_eligible: product.is_barter_eligible,
+      restriction_reason: product.restriction_reason,
+      pos_integration_id: product.pos_integration_id,
+      external_product_id: product.external_product_id,
+      external_variant_id: product.external_variant_id
+    };
+
+    addToCart(cartItem, currentMerchantInfo);
+
+    toast({
+      title: "Added to cart",
+      description: `${product.name} has been added to your cart.`
+    });
+  };
 
   const getSocialUrl = (platform: string, handle: string) => {
     const baseUrls = {
@@ -53,10 +175,29 @@ const ListingDetail = () => {
       facebook: 'https://facebook.com/',
       linkedin: 'https://linkedin.com/in/'
     };
-    
+
     const cleanHandle = handle.replace('@', '');
     return `${baseUrls[platform as keyof typeof baseUrls]}${cleanHandle}`;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (!business) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-2">Business not found</h2>
+          <Button onClick={() => navigate('/')}>Back to Stores</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -76,59 +217,30 @@ const ListingDetail = () => {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <CardTitle className="text-2xl">{mockBusiness.businessName}</CardTitle>
-                      {mockBusiness.verified && (
+                      <CardTitle className="text-2xl">{business.business_name}</CardTitle>
+                      {business.verified && (
                         <CheckCircle className="h-6 w-6 text-green-500" />
                       )}
                     </div>
                     <Badge variant="secondary" className="mb-4">
-                      {mockBusiness.category}
+                      {business.category}
                     </Badge>
-                    
-                    {/* Website and Social Media */}
-                    <div className="flex gap-3 mb-4">
-                      {mockBusiness.website && (
-                        <a 
-                          href={mockBusiness.website} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
-                        >
-                          <Globe className="h-4 w-4" />
-                          Visit Website
-                        </a>
-                      )}
-                      {Object.entries(mockBusiness.socialMedia).map(([platform, handle]) => 
-                        handle ? (
-                          <a 
-                            key={platform}
-                            href={getSocialUrl(platform, handle)} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-gray-600 hover:text-blue-600 text-sm capitalize"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            {platform}
-                          </a>
-                        ) : null
-                      )}
-                    </div>
                   </div>
                   <div className="flex items-center gap-1 text-lg font-semibold text-green-600">
                     <Coins className="h-5 w-5" />
-                    <span>{mockBusiness.points} pts</span>
+                    <span>{business.barter_percentage}% Barter</span>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-4 text-sm text-gray-600">
                   <div className="flex items-center gap-1">
                     <MapPin className="h-4 w-4" />
-                    <span>{mockBusiness.location}</span>
+                    <span>{business.location}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span>{mockBusiness.rating}</span>
-                    <span>({mockBusiness.reviews} reviews)</span>
+                    <span>4.5</span>
+                    <span>(0 reviews)</span>
                   </div>
                 </div>
               </CardHeader>
@@ -137,51 +249,94 @@ const ListingDetail = () => {
                 <div>
                   <h3 className="font-semibold text-lg mb-3">About this business</h3>
                   <p className="text-gray-700 leading-relaxed">
-                    {mockBusiness.fullDescription}
+                    {business.description || 'No description available.'}
                   </p>
                 </div>
 
-                {/* Priced Items */}
-                {mockBusiness.pricedItems && mockBusiness.pricedItems.length > 0 && (
+                {business.services_offered && business.services_offered.length > 0 && (
                   <div>
-                    <h3 className="font-semibold text-lg mb-3">Available for Purchase</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {mockBusiness.pricedItems.map((item, index) => (
-                        <div key={index} className="flex justify-between items-center p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <div>
-                            <div className="font-medium">{item.name}</div>
-                            <div className="text-sm text-gray-600">${item.price}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-semibold text-green-600">{item.points} pts</div>
-                            <Button size="sm" className="mt-1">Buy Now</Button>
-                          </div>
-                        </div>
+                    <h3 className="font-semibold text-lg mb-3">Services Offered</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {business.services_offered.map((service: string, index: number) => (
+                        <Badge key={index} variant="outline" className="text-sm">
+                          {service}
+                        </Badge>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div>
-                  <h3 className="font-semibold text-lg mb-3">Services Offered</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {mockBusiness.servicesOffered.map((service, index) => (
-                      <Badge key={index} variant="outline" className="text-sm">
-                        {service}
-                      </Badge>
-                    ))}
+                {business.wanting_in_return && business.wanting_in_return.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-lg mb-3">Looking For</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {business.wanting_in_return.map((want: string, index: number) => (
+                        <Badge key={index} variant="outline" className="text-sm bg-blue-50">
+                          {want}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div>
-                  <h3 className="font-semibold text-lg mb-3">Looking For</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {mockBusiness.wantingInReturn.map((want, index) => (
-                      <Badge key={index} variant="outline" className="text-sm bg-blue-50">
-                        {want}
-                      </Badge>
-                    ))}
+                {/* Product Catalog Section */}
+                <div className="border-t pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-lg">Available Products</h3>
+                    <Badge variant="secondary">{filteredProducts.length} items</Badge>
                   </div>
+
+                  {/* Search and Filter */}
+                  <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        placeholder="Search products by name or SKU..."
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger className="w-full sm:w-[200px]">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Products Grid */}
+                  {productsLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    </div>
+                  ) : filteredProducts.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-lg">
+                      <Package className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                      <p className="text-gray-600">No products available</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {productSearch || categoryFilter !== 'all'
+                          ? 'Try adjusting your filters'
+                          : 'This store hasn\'t added any products yet'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredProducts.map((product) => (
+                        <ProductCard
+                          key={product.id}
+                          product={product}
+                          merchantBarterPercentage={business.barter_percentage}
+                          onAddToCart={handleAddToCart}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -196,7 +351,7 @@ const ListingDetail = () => {
               <CardContent className="space-y-4">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600 mb-1">
-                    ${mockBusiness.estimatedValue}
+                    ${Number(business.estimated_value || 0).toLocaleString()}
                   </div>
                   <div className="text-sm text-gray-600">Estimated Value</div>
                 </div>
@@ -205,25 +360,27 @@ const ListingDetail = () => {
                   <Button className="w-full" size="lg">
                     Request Trade
                   </Button>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full"
                     onClick={() => setIsInquiryModalOpen(true)}
                   >
                     <MessageSquare className="h-4 w-4 mr-2" />
                     Inquire or Purchase
                   </Button>
-                  <Button variant="outline" className="w-full">
-                    <Mail className="h-4 w-4 mr-2" />
-                    Contact Directly
-                  </Button>
+                  {business.contact_method && (
+                    <Button variant="outline" className="w-full">
+                      <Mail className="h-4 w-4 mr-2" />
+                      Contact Directly
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Business Owner</CardTitle>
+                <CardTitle className="text-lg">Business Info</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-3">
@@ -231,20 +388,20 @@ const ListingDetail = () => {
                     <User className="h-6 w-6 text-gray-600" />
                   </div>
                   <div>
-                    <div className="font-medium">{mockBusiness.owner}</div>
+                    <div className="font-medium">{business.business_name}</div>
                     <div className="text-sm text-gray-600">
-                      Member since {mockBusiness.memberSince}
+                      Member since {new Date(business.created_at).getFullYear()}
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 pt-3 border-t">
                   <div className="text-center">
-                    <div className="font-semibold">{mockBusiness.completedTrades}</div>
+                    <div className="font-semibold">0</div>
                     <div className="text-xs text-gray-600">Completed Trades</div>
                   </div>
                   <div className="text-center">
-                    <div className="font-semibold">{mockBusiness.responseTime}</div>
+                    <div className="font-semibold">-</div>
                     <div className="text-xs text-gray-600">Response Time</div>
                   </div>
                 </div>
@@ -292,10 +449,10 @@ const ListingDetail = () => {
       <InquiryModal
         isOpen={isInquiryModalOpen}
         onClose={() => setIsInquiryModalOpen(false)}
-        merchantName={mockBusiness.owner}
-        businessName={mockBusiness.businessName}
-        availableServices={mockBusiness.servicesOffered}
-        pricedItems={mockBusiness.pricedItems}
+        merchantName={business.business_name}
+        businessName={business.business_name}
+        availableServices={business.services_offered || []}
+        pricedItems={[]}
       />
     </div>
   );

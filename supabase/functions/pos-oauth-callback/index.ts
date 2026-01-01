@@ -108,9 +108,14 @@ const exchangeCodeForToken = async (
       break;
 
     case 'clover':
-      tokenUrl = 'https://sandbox.dev.clover.com/oauth/token';
+      // Support both sandbox and production Clover environments
+      const cloverEnv = Deno.env.get('CLOVER_ENVIRONMENT') || 'production';
+      tokenUrl = cloverEnv === 'sandbox'
+        ? 'https://sandbox.dev.clover.com/oauth/token'
+        : 'https://www.clover.com/oauth/token';
       clientId = Deno.env.get('CLOVER_OAUTH_CLIENT_ID') || '';
       clientSecret = Deno.env.get('CLOVER_OAUTH_CLIENT_SECRET') || '';
+      console.log(`🔧 Clover environment: ${cloverEnv}, using token URL: ${tokenUrl}`);
       break;
 
     case 'lightspeed':
@@ -190,10 +195,27 @@ const exchangeCodeForToken = async (
 
   console.log(`✅ Token exchange successful for ${provider}`);
 
-  return await response.json();
+  const tokenResponse = await response.json();
+
+  // Log full token response for debugging
+  if (provider.toLowerCase() === 'lightspeed') {
+    console.log('🔍 Lightspeed token response:', JSON.stringify(tokenResponse, null, 2));
+    console.log('🔑 access_token:', tokenResponse.access_token?.substring(0, 30) + '...');
+    console.log('🔄 refresh_token:', tokenResponse.refresh_token?.substring(0, 30) + '...');
+    console.log('⏰ expires_in:', tokenResponse.expires_in);
+    console.log('🔐 token_type:', tokenResponse.token_type);
+    console.log('📋 scope:', tokenResponse.scope);
+  }
+
+  if (provider.toLowerCase() === 'clover') {
+    console.log('🔍 Clover token response:', JSON.stringify(tokenResponse, null, 2));
+    console.log('🔑 access_token:', tokenResponse.access_token?.substring(0, 30) + '...');
+  }
+
+  return tokenResponse;
 };
 
-const getMerchantInfo = async (provider: string, accessToken: string, clientId?: string, shopName?: string) => {
+const getMerchantInfo = async (provider: string, accessToken: string, clientId?: string, shopName?: string, tokenMerchantId?: string) => {
   let merchantId = '';
   let locationId = '';
   let storeId = '';
@@ -254,33 +276,35 @@ const getMerchantInfo = async (provider: string, accessToken: string, clientId?:
       }
       
       case 'clover': {
-        const response = await fetch('https://sandbox.dev.clover.com/v3/merchants/me', {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          merchantId = data.id || '';
+        // Clover provides merchant_id as a query parameter in the OAuth callback URL
+        if (tokenMerchantId) {
+          merchantId = tokenMerchantId;
+          console.log(`✅ Clover merchant ID from callback URL: ${merchantId}`);
+        } else {
+          console.error(`❌ Clover merchant_id not found in callback URL parameters`);
+          console.error(`   Expected: ?merchant_id=XXX in the OAuth callback URL`);
         }
         break;
       }
 
       case 'lightspeed': {
-        if (!shopName) break;
+        console.log(`💡 Processing Lightspeed integration...`);
+        console.log(`💡 Shop name/domain: ${shopName || 'NOT PROVIDED'}`);
 
-        const response = await fetch(`https://${shopName}.retail.lightspeed.app/api/1.0/account.json`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          merchantId = data.accountID || '';
-          storeId = shopName; // Store domain prefix for future API calls
+        if (!shopName) {
+          console.error(`❌ Shop name required for Lightspeed`);
+          break;
         }
+
+        // For Lightspeed R-Series, we can't easily get the account ID from the API
+        // without knowing it first (chicken-egg problem).
+        // So we'll just save the store_id (shop domain) and skip the account_id for now.
+        // The product sync can use the store_id to make API calls.
+
+        storeId = shopName; // Store domain prefix
+        console.log(`✅ Lightspeed store ID (shop domain): ${storeId}`);
+        console.log(`⚠️  Account ID will need to be configured separately if needed`);
+
         break;
       }
     }
@@ -302,12 +326,23 @@ serve(async (req) => {
     const state = url.searchParams.get('state');
     const shop = url.searchParams.get('shop'); // Shopify shop domain
     const domainPrefix = url.searchParams.get('domain_prefix'); // Lightspeed domain prefix
+    const cloverMerchantId = url.searchParams.get('merchant_id'); // Clover merchant ID from callback
+    const cloverEmployeeId = url.searchParams.get('employee_id'); // Clover employee ID from callback
     const error = url.searchParams.get('error');
+
+    console.log('📥 Callback URL params:', {
+      code: code?.substring(0, 10) + '...',
+      state: state?.substring(0, 10) + '...',
+      shop,
+      domainPrefix,
+      cloverMerchantId,
+      cloverEmployeeId
+    });
 
     if (error) {
       console.error('OAuth error:', error);
       const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:8080';
-      return Response.redirect(`${frontendUrl}/merchant-dashboard?oauth_error=${error}`);
+      return Response.redirect(`${frontendUrl}/merchant/dashboard?oauth_error=${error}`);
     }
 
     if (!code || !state) {
@@ -343,17 +378,81 @@ serve(async (req) => {
     const redirectUri = `${Deno.env.get('SUPABASE_URL')}/functions/v1/pos-oauth-callback`;
     const tokenData = await exchangeCodeForToken(provider, code, redirectUri, shopNameToUse || undefined);
 
+    // Log token data for debugging (especially for Clover)
+    if (provider.toLowerCase() === 'clover') {
+      console.log('🔍 Clover token response:', JSON.stringify(tokenData, null, 2));
+      console.log('🔍 merchant_id in token?:', tokenData.merchant_id);
+    }
+
     // Get merchant/location info
     const clientId = provider === 'square' ? Deno.env.get('SQUARE_OAUTH_CLIENT_ID') : undefined;
-    const { merchantId, locationId, storeId } = await getMerchantInfo(provider, tokenData.access_token, clientId, shopNameToUse || undefined);
+    const { merchantId, locationId, storeId } = await getMerchantInfo(
+      provider,
+      tokenData.access_token,
+      clientId,
+      shopNameToUse || undefined,
+      cloverMerchantId || undefined // Pass Clover merchant_id from callback URL
+    );
 
-    // Store integration in database
+    // Build config object based on provider
+    const config: any = {};
+    if (provider.toLowerCase() === 'clover') {
+      const cloverEnv = Deno.env.get('CLOVER_ENVIRONMENT') || 'production';
+      config.environment = cloverEnv;
+      console.log(`💾 Saving Clover integration with environment: ${cloverEnv}`);
+      console.log(`💾 merchant_id to save: ${merchantId || 'NULL'}`);
+    }
+
+    // Generate unique nonce for encryption
+    const encryptionNonce = crypto.randomUUID();
+
+    // Encrypt tokens before storing
+    console.log('🔐 Encrypting OAuth tokens...');
+    const { data: encryptedAccessToken } = await supabase
+      .rpc('encrypt_pos_token', {
+        p_token: tokenData.access_token,
+        p_nonce: encryptionNonce
+      });
+
+    let encryptedRefreshToken = null;
+    if (tokenData.refresh_token) {
+      const { data: refreshToken } = await supabase
+        .rpc('encrypt_pos_token', {
+          p_token: tokenData.refresh_token,
+          p_nonce: encryptionNonce
+        });
+      encryptedRefreshToken = refreshToken;
+    }
+
+    console.log('✅ Tokens encrypted successfully');
+
+    // Deactivate previous integrations for this user and provider only
+    console.log(`🔄 Deactivating previous ${provider} integrations...`);
+    const { error: deactivateError } = await supabase
+      .from('pos_integrations')
+      .update({ status: 'inactive' })
+      .eq('user_id', userId)
+      .eq('provider', provider)
+      .eq('status', 'active');
+
+    if (deactivateError) {
+      console.error(`⚠️ Warning: Failed to deactivate old ${provider} integrations:`, deactivateError);
+      // Don't throw - continue with new integration
+    } else {
+      console.log(`✅ Previous ${provider} integrations deactivated`);
+    }
+
+    // Store integration in database with encrypted tokens
     const { error: integrationError } = await supabase
       .from('pos_integrations')
       .insert({
         user_id: userId,
         provider: provider,
         auth_method: 'oauth',
+        encryption_nonce: encryptionNonce,
+        access_token_encrypted: encryptedAccessToken,
+        refresh_token_encrypted: encryptedRefreshToken,
+        // Keep plaintext for backward compatibility during migration
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token || null,
         merchant_id: merchantId || null,
@@ -361,6 +460,7 @@ serve(async (req) => {
         status: 'active',
         scopes: tokenData.scope?.split(' ') || [],
         token_expires_at: tokenData.expires_at || null,
+        config: Object.keys(config).length > 0 ? config : null,
       });
 
     if (integrationError) {
@@ -411,11 +511,11 @@ serve(async (req) => {
 
     // Redirect to merchant dashboard with success
     const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:8080';
-    return Response.redirect(`${frontendUrl}/merchant-dashboard?oauth_success=true&provider=${provider}`);
+    return Response.redirect(`${frontendUrl}/merchant/dashboard?oauth_success=true&provider=${provider}`);
 
   } catch (error: any) {
     console.error('Error in pos-oauth-callback:', error);
     const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:8080';
-    return Response.redirect(`${frontendUrl}/merchant-dashboard?oauth_error=${encodeURIComponent(error.message)}`);
+    return Response.redirect(`${frontendUrl}/merchant/dashboard?oauth_error=${encodeURIComponent(error.message)}`);
   }
 });

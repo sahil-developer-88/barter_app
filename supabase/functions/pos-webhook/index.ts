@@ -19,6 +19,9 @@ import { handleCloverWebhook } from './providers/clover.ts';
 import { handleToastWebhook } from './providers/toast.ts';
 import { handleLightspeedWebhook } from './providers/lightspeed.ts';
 
+// Import signature verification
+import { verifyWebhookSignature } from './utils/signature-verification.ts';
+
 /**
  * Main webhook endpoint that routes to provider-specific handlers
  * Supports: Square, Shopify, Adyen, Clover, Toast, Lightspeed
@@ -53,8 +56,34 @@ serve(async (req) => {
       payload = body;
     }
 
+    // Verify webhook signature BEFORE processing
+    const isSignatureValid = verifyWebhookSignature(provider, body, headers);
+
+    if (!isSignatureValid) {
+      console.error(`❌ Invalid signature for ${provider} webhook - REJECTING`);
+
+      // Log failed verification for security audit
+      await logWebhook(
+        provider,
+        req.url,
+        payload,
+        headers['x-signature'] || headers['signature'] || headers['x-shopify-hmac-sha256'] || headers['toast-signature'],
+        'failed_verification'
+      );
+
+      return new Response(
+        JSON.stringify({
+          error: 'Invalid webhook signature',
+          message: 'Webhook signature verification failed'
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`✅ ${provider} webhook signature verified`);
+
     // Log webhook for debugging
-    await logWebhook(provider, req.url, payload, headers['x-signature'] || headers['signature']);
+    await logWebhook(provider, req.url, payload, headers['x-signature'] || headers['signature'], 'success');
 
     let result;
 
@@ -113,7 +142,8 @@ async function logWebhook(
   provider: string,
   endpoint: string,
   payload: any,
-  signature?: string
+  signature?: string,
+  status: string = 'success'
 ) {
   try {
     await supabase.from('webhook_logs').insert({
@@ -121,7 +151,7 @@ async function logWebhook(
       endpoint,
       payload,
       signature,
-      status: 'success'
+      status
     });
   } catch (error) {
     console.error('Failed to log webhook:', error);

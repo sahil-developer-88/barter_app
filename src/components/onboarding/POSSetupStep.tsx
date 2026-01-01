@@ -10,9 +10,10 @@ type POSOption = 'connect_now' | 'later' | 'not_needed' | null;
 interface POSSetupStepProps {
   onComplete: (preference: string) => void;
   onBack: () => void;
+  onSaveBeforePOS?: () => Promise<void>;
 }
 
-export function POSSetupStep({ onComplete, onBack }: POSSetupStepProps) {
+export function POSSetupStep({ onComplete, onBack, onSaveBeforePOS }: POSSetupStepProps) {
   const [selectedOption, setSelectedOption] = useState<POSOption>(null);
   const [showWizard, setShowWizard] = useState(false);
 
@@ -28,7 +29,8 @@ export function POSSetupStep({ onComplete, onBack }: POSSetupStepProps) {
 
   const handleWizardSuccess = () => {
     setShowWizard(false);
-    onComplete('completed');
+    // After successful OAuth, redirect to merchant dashboard will happen
+    // Onboarding is already completed by onSaveBeforePOS callback
   };
 
   return (
@@ -130,6 +132,7 @@ export function POSSetupStep({ onComplete, onBack }: POSSetupStepProps) {
         open={showWizard}
         onOpenChange={setShowWizard}
         onSuccess={handleWizardSuccess}
+        onBeforeOAuth={onSaveBeforePOS}
       />
     </>
   );
